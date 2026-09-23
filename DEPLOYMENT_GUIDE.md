@@ -42,7 +42,7 @@ git push origin main
    - **Runtime:** `Python 3`
    - **Build Command:**
      ```bash
-     pip install -r requirements.txt
+     UV_LINK_MODE=copy pip install -r requirements.txt
      ```
    - **Start Command:**
      ```bash
@@ -55,6 +55,7 @@ Under the **Environment Variables** section in Render, add:
 
 | Key | Value | Description |
 | :--- | :--- | :--- |
+| `UV_LINK_MODE` | `copy` | Suppresses cache hardlink warning on Linux |
 | `GROQ_API_KEY` | `gsk_...` | **Required.** Your Groq API key for the dedicated AI chatbot |
 | `PYTHON_VERSION` | `3.10.12` | Python version for Render |
 | `ENVIRONMENT` | `production` | Deployment environment |
