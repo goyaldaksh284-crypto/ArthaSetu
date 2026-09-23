@@ -1,132 +1,189 @@
 """
-Simple API Server for Transaction Parser
-=========================================
+Simple API Server for Transaction Parser & Chatbot Assistant
+=============================================================
 
-A minimal FastAPI server to expose the transaction parser as HTTP endpoints.
-This allows the frontend to call the parser via API.
+FastAPI server exposing AI endpoints for:
+- Receipt / Bill image parsing (/api/parse-image)
+- Voice recording parsing (/api/parse-voice)
+- Voice transcript / text parsing (/api/parse-text)
+- Dedicated website chatbot assistant (/api/chat)
 
-Usage:
-    uvicorn simple_api_server:app --reload --port 8001
-
-Runs on 8001, not 8000, so it can run alongside backend/main.py (the live
-agent-analysis backend, which owns port 8000) without colliding.
+Runs on port 8001 by default, alongside the main agent backend (port 8000).
 """
 
 import os
+import sys
 import tempfile
-from fastapi import FastAPI, UploadFile, File, HTTPException
+from typing import List, Dict, Any, Optional
+from pathlib import Path
+from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
+from dotenv import load_dotenv
+
+# Ensure UTF-8 output on Windows
+if sys.platform == "win32":
+    try:
+        sys.stdout.reconfigure(encoding='utf-8')
+        sys.stderr.reconfigure(encoding='utf-8')
+    except Exception:
+        pass
+
+# Load environment
+load_dotenv()
+load_dotenv(Path(__file__).parent / "backend" / ".env")
+
 from transaction_parser import TransactionParser
-import uvicorn
 
-app = FastAPI()
+app = FastAPI(
+    title="ArthaSetu Parser & Chat API",
+    description="Multimodal receipt OCR, voice processing, and AI chat assistant",
+    version="2.0.0"
+)
 
-# Enable CORS for frontend. Defaults to the frontend's actual dev port
-# (8080, see frontend/vite.config.ts); production deployments must set
-# CORS_ALLOWED_ORIGINS to the real deployed frontend origin(s).
+# CORS setup
+allowed_origins = os.environ.get(
+    "CORS_ALLOWED_ORIGINS",
+    "http://localhost:8080,http://localhost:5173,http://127.0.0.1:8080,http://127.0.0.1:5173"
+).split(",")
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=os.environ.get("CORS_ALLOWED_ORIGINS", "http://localhost:8080").split(","),
+    allow_origins=allowed_origins,
+    allow_origin_regex=r"https://.*\.vercel\.app",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# Initialize parser (models loaded on first use)
+# Initialize parser
 parser = TransactionParser()
+
+
+class TextParseRequest(BaseModel):
+    text: str
+
+
+class ChatMessage(BaseModel):
+    role: str
+    content: str
+
+
+class ChatRequest(BaseModel):
+    messages: List[ChatMessage]
+    user_context: Optional[Dict[str, Any]] = None
+
 
 @app.get("/")
 def root():
     return {
-        "message": "Transaction Parser API",
+        "status": "healthy",
+        "service": "ArthaSetu Transaction Parser & Chatbot API",
+        "version": "2.0.0",
         "endpoints": {
             "parse_image": "/api/parse-image",
-            "parse_voice": "/api/parse-voice"
+            "parse_voice": "/api/parse-voice",
+            "parse_text": "/api/parse-text",
+            "chat": "/api/chat",
+            "health": "/api/health"
         }
     }
+
+
+@app.get("/api/health")
+def health():
+    return {
+        "status": "ok",
+        "google_keys_available": len(parser.google_keys),
+        "openrouter_keys_available": len(parser.openrouter_keys)
+    }
+
 
 @app.post("/api/parse-image")
 async def parse_image(file: UploadFile = File(...)):
     """
-    Parse an image (receipt/bill) to extract transaction details.
-    
-    Accepts: JPEG, PNG, BMP, TIFF
-    Returns: JSON with transaction fields
+    Parse receipt/bill image using OpenAI (gpt-4o-mini) and Google (gemini) multimodal vision.
     """
-    # Validate file type
     if not file.content_type or not file.content_type.startswith("image/"):
-        raise HTTPException(status_code=400, detail="File must be an image")
-    
-    # Create temporary file
-    with tempfile.NamedTemporaryFile(delete=False, suffix=f".{file.filename.split('.')[-1]}") as tmp_file:
-        tmp_path = tmp_file.name
-        
-        try:
-            # Save uploaded file
-            content = await file.read()
-            tmp_file.write(content)
-            tmp_file.flush()
-            
-            # Parse image
-            result = parser.parse_image(tmp_path)
-            
-            return result
-            
-        except Exception as e:
-            raise HTTPException(status_code=500, detail=f"Error processing image: {str(e)}")
-        
-        finally:
-            # Clean up temporary file
-            if os.path.exists(tmp_path):
+        raise HTTPException(status_code=400, detail="File must be an image (JPEG, PNG, WEBP, BMP)")
+
+    safe_name = file.filename or "receipt.jpg"
+    ext = safe_name.split(".")[-1] if "." in safe_name else "jpg"
+
+    with tempfile.NamedTemporaryFile(delete=False, suffix=f".{ext}") as tmp:
+        tmp_path = tmp.name
+
+    try:
+        content = await file.read()
+        with open(tmp_path, "wb") as f:
+            f.write(content)
+
+        result = parser.parse_image(tmp_path)
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error processing image: {str(e)}")
+    finally:
+        if os.path.exists(tmp_path):
+            try:
                 os.remove(tmp_path)
+            except Exception:
+                pass
+
 
 @app.post("/api/parse-voice")
 async def parse_voice(file: UploadFile = File(...)):
     """
-    Parse a voice recording to extract transaction details.
-    
-    Accepts: WAV, MP3, FLAC
-    Returns: JSON with transaction fields
+    Parse an audio recording (WAV, MP3, WEBM, OGG) to extract transaction details.
     """
-    # Validate file type
-    valid_audio_types = ["audio/wav", "audio/mpeg", "audio/mp3", "audio/flac", "audio/x-wav"]
-    if not file.content_type or file.content_type not in valid_audio_types:
-        raise HTTPException(status_code=400, detail="File must be an audio file (WAV, MP3, FLAC)")
-    
-    # Create temporary file
-    file_ext = file.filename.split('.')[-1] if '.' in file.filename else 'wav'
-    with tempfile.NamedTemporaryFile(delete=False, suffix=f".{file_ext}") as tmp_file:
-        tmp_path = tmp_file.name
-        
-        try:
-            # Save uploaded file
-            content = await file.read()
-            tmp_file.write(content)
-            tmp_file.flush()
-            
-            # Parse audio
-            result = parser.parse_voice(tmp_path)
-            
-            return result
-            
-        except Exception as e:
-            raise HTTPException(status_code=500, detail=f"Error processing audio: {str(e)}")
-        
-        finally:
-            # Clean up temporary file
-            if os.path.exists(tmp_path):
+    safe_name = file.filename or "recording.wav"
+    ext = safe_name.split(".")[-1] if "." in safe_name else "wav"
+
+    with tempfile.NamedTemporaryFile(delete=False, suffix=f".{ext}") as tmp:
+        tmp_path = tmp.name
+
+    try:
+        content = await file.read()
+        with open(tmp_path, "wb") as f:
+            f.write(content)
+
+        result = parser.parse_voice(tmp_path)
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error processing audio: {str(e)}")
+    finally:
+        if os.path.exists(tmp_path):
+            try:
                 os.remove(tmp_path)
+            except Exception:
+                pass
+
+
+@app.post("/api/parse-text")
+def parse_text(req: TextParseRequest):
+    """
+    Parse spoken transcript or typed text into a structured transaction.
+    """
+    if not req.text or not req.text.strip():
+        raise HTTPException(status_code=400, detail="Text field cannot be empty")
+    return parser.parse_text(req.text)
+
+
+@app.post("/api/chat")
+def chat(req: ChatRequest):
+    """
+    ArthaSetu Website AI Assistant Chat endpoint.
+    Strictly answers questions related to ArthaSetu and gig worker personal finance.
+    """
+    if not req.messages:
+        raise HTTPException(status_code=400, detail="Messages list cannot be empty")
+
+    dict_messages = [{"role": m.role, "content": m.content} for m in req.messages]
+    result = parser.chat(dict_messages, req.user_context)
+    return result
+
 
 if __name__ == "__main__":
-    print("\n" + "="*60)
-    print("Starting Transaction Parser API Server")
-    print("="*60)
-    print("\nEndpoints:")
-    print("  POST /api/parse-image - Parse receipt/bill images")
-    print("  POST /api/parse-voice - Parse voice recordings")
-    print("\nServer will be available at: http://localhost:8001")
-    print("API docs at: http://localhost:8001/docs")
-    print("\n" + "-"*60 + "\n")
-    
-    uvicorn.run(app, host="0.0.0.0", port=8001, reload=True)
-
+    import uvicorn
+    port = int(os.environ.get("PARSER_PORT", 8001))
+    print(f"\n{'='*60}\nStarting ArthaSetu AI Parser & Chat Server on port {port}\n{'='*60}\n")
+    uvicorn.run(app, host="0.0.0.0", port=port)

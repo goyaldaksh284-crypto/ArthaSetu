@@ -1,36 +1,12 @@
-# AutoGen -- NOT required to run backend/main.py itself. None of the 9 live
-# agents (see agents/finance_helpers.py) import autogen_runtime.py anymore;
-# they compute real numbers directly and only call llm_client.py (plain
-# `requests`) for narrative text. Kept here only because the orphaned,
-# not-wired-into-main.py agents/financial_agent.py and agents/monitor.py
-# still import autogen_runtime.py. If those get removed too, this can go.
-autogen-agentchat
-autogen-ext[openai,mcp]
-
-# HTTP client for Gemini/Groq (OpenAI-compatible REST endpoints, see
-# llm_client.py) and all Supabase REST calls (see agents/finance_helpers.py)
-requests
-
-# Configuration
-pyyaml
-
-# Rich terminal UI
-rich
-
-# Async support
-anyio
-
-# Optional: Web framework if we need HTTP endpoints
-fastapi
-uvicorn[standard]
-python-multipart
-
-# Auth: verifying Supabase-issued JWTs
-PyJWT
-
-# Per-user rate limiting on expensive endpoints (/api/analyze, /api/analyze-sync)
-slowapi
-
-# Database (for direct queries if needed)
-psycopg2-binary
-sqlalchemy
+# ===========================================================================
+# ArthaSetu Backend Requirements (Render Free Tier Ready)
+# Memory footprint: < 45 MB RAM (Render Free limit: 512 MB)
+# ===========================================================================
+fastapi>=0.104.0
+uvicorn[standard]>=0.24.0
+python-multipart>=0.0.6
+requests>=2.31.0
+python-dotenv>=1.0.0
+PyJWT>=2.8.0
+slowapi>=0.1.9
+Pillow>=10.0.0

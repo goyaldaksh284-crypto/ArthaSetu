@@ -9,8 +9,6 @@ import { ProtectedRoute } from "./components/ProtectedRoute";
 import Header from "./components/Header";
 import MainLayout from "./layouts/MainLayout";
 import LandingPage from "./pages/LandingPage";
-import FeaturesPage from "./pages/FeaturesPage";
-import PhasesPage from "./pages/PhasesPage";
 import Auth from "./pages/Auth";
 import Transactions from "./pages/Transactions";
 import Dashboard from "./pages/Dashboard";
@@ -25,6 +23,7 @@ import Actions from "./pages/Actions";
 import Goals from "./pages/Goals";
 import Savings from "./pages/Savings";
 import NotFound from "./pages/NotFound";
+import ChatbotWidget from "./components/ChatbotWidget";
 
 const queryClient = new QueryClient();
 
@@ -33,8 +32,6 @@ function AppRoutes() {
     <Routes>
       {/* Public Routes */}
       <Route path="/" element={<LandingPage />} />
-      <Route path="/features" element={<FeaturesPage />} />
-      <Route path="/phases" element={<PhasesPage />} />
       <Route path="/signup" element={<Auth />} />
       <Route path="/login" element={<Auth />} />
 
@@ -175,6 +172,7 @@ const App = () => (
             <Toaster />
             <Sonner />
             <AppRoutes />
+            <ChatbotWidget />
           </TooltipProvider>
         </SidebarProvider>
       </AppProvider>

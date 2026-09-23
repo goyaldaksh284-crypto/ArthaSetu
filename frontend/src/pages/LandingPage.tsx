@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import { 
   ArrowRight, 
   Check, 
@@ -62,28 +62,52 @@ const LandingPage = () => {
 
   const team = [
     {
-      name: 'Nikhileswara Rao Sulake',
-      role: 'Medical Image Analysis Researcher | Computer Vision & Deep Learning',
-      initials: 'NR',
-      linkedin: 'https://www.linkedin.com/in/nikhileswara-rao-sulake/'
+      name: 'Nitish Kumar Singh',
+      yearSection: '2nd Year, AIML',
+      role: 'Backend Development',
+      initials: 'NK',
+      image: '/nitish.png',
+      isLeader: true
     },
     {
-      name: 'Sai Manikanta Eswar Machara',
-      role: 'Computer Vision Researcher | Medical Imaging | Deep Learning',
-      initials: 'SM',
-      linkedin: 'https://www.linkedin.com/in/sai-manikanta-eswar-machara/'
+      name: 'Palak',
+      yearSection: '2nd Year, CSE',
+      role: 'Presentation, UI Design',
+      initials: 'PL',
+      image: '/palak.jpg',
+      isLeader: false
     },
     {
-      name: 'Siva Teja Reddy Annapureddy',
-      role: 'Machine Learning Engineer | Generative AI',
-      initials: 'ST',
-      linkedin: 'https://www.linkedin.com/in/siva-teja-reddy-annapureddy/'
+      name: 'Stuti Bhatnagar',
+      yearSection: '2nd Year, AIML',
+      role: 'PPT, Database Management',
+      initials: 'SB',
+      image: '/stuti.jpg',
+      isLeader: false
     },
     {
-      name: 'Likhith Busam',
-      role: 'Agentic AI Specialist | Generative AI',
-      initials: 'LB',
-      linkedin: 'https://www.linkedin.com/in/likhith-busam-7b465a31b/'
+      name: 'Prateek',
+      yearSection: '2nd Year, CSE',
+      role: 'Frontend Development',
+      initials: 'PK',
+      image: '/prateek.jpg',
+      isLeader: false
+    },
+    {
+      name: 'Dev Srivastava',
+      yearSection: '2nd Year, CSE',
+      role: 'Design, Problem Solving',
+      initials: 'DS',
+      image: '/dev.jpg',
+      isLeader: false
+    },
+    {
+      name: 'Daksh Goyal',
+      yearSection: '2nd Year, CSE',
+      role: 'Testing',
+      initials: 'DG',
+      image: '/daksh.jpg',
+      isLeader: false
     }
   ];
 
@@ -114,10 +138,12 @@ const LandingPage = () => {
               initial={{ scale: 0.5, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               transition={{ delay: 0.2 }}
-              className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-slate-100 border border-slate-200 text-slate-600 text-sm font-medium mb-8"
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-slate-100 border border-slate-200 text-slate-700 text-sm font-medium mb-8 shadow-xs"
             >
-              <Brain size={16} />
-              AI-Powered Financial Companion
+              <div className="w-5 h-5 rounded-md bg-black flex items-center justify-center p-0.5 border border-slate-800">
+                <img src="/arthasetu-logo.png" alt="ArthaSetu" className="w-full h-full object-contain" />
+              </div>
+              AI-Powered Financial Companion for Bharat
             </motion.div>
 
             {/* Main Heading */}
@@ -127,10 +153,14 @@ const LandingPage = () => {
               transition={{ delay: 0.4 }}
               className="text-5xl sm:text-6xl lg:text-7xl font-bold text-slate-900 mb-6 leading-tight"
             >
-              <span className="bg-gradient-to-r from-slate-900 via-slate-800 to-slate-600 bg-clip-text text-transparent">
-                KAMAI
-              </span>
-              <br />
+              <div className="flex items-center justify-center gap-3.5 mb-2">
+                <div className="w-14 h-14 sm:w-18 sm:h-18 rounded-2xl bg-black flex items-center justify-center p-2.5 shadow-xl border border-slate-800">
+                  <img src="/arthasetu-logo.png" alt="ArthaSetu Logo" className="w-full h-full object-contain" />
+                </div>
+                <span className="bg-gradient-to-r from-slate-900 via-slate-800 to-slate-600 bg-clip-text text-transparent">
+                  ArthaSetu
+                </span>
+              </div>
               <span className="text-3xl sm:text-4xl lg:text-5xl text-slate-600 font-normal">
                 Financial Intelligence
               </span>
@@ -174,10 +204,10 @@ const LandingPage = () => {
               <Button
                 variant="outline"
                 size="lg"
-                onClick={() => navigate('/phases')}
+                onClick={() => navigate('/login')}
                 className="border-slate-300 text-slate-700 hover:bg-slate-50 px-8 py-6 text-lg font-medium"
               >
-                View Architecture
+                Sign In
                 <ChevronRight className="ml-2" size={20} />
               </Button>
             </motion.div>
@@ -207,7 +237,7 @@ const LandingPage = () => {
       </section>
 
       {/* Features Section */}
-      <section className="py-20 bg-white">
+      <section id="features" className="py-20 bg-white">
         <div className="max-w-6xl mx-auto px-4">
           <motion.div
             initial={{ opacity: 0 }}
@@ -252,11 +282,10 @@ const LandingPage = () => {
             className="mt-12 text-center"
           >
             <Button
-              variant="outline"
-              onClick={() => navigate('/features')}
-              className="border-slate-300 text-slate-700 hover:bg-slate-50"
+              onClick={() => navigate('/signup')}
+              className="bg-slate-900 hover:bg-slate-800 text-white"
             >
-              Explore All Features
+              Get Started Now
               <ArrowRight className="ml-2" size={16} />
             </Button>
           </motion.div>
@@ -264,7 +293,7 @@ const LandingPage = () => {
       </section>
 
       {/* About Section */}
-      <section className="py-20 bg-slate-50">
+      <section id="about" className="py-20 bg-slate-50">
         <div className="max-w-6xl mx-auto px-4">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 items-center">
             <motion.div
@@ -273,12 +302,12 @@ const LandingPage = () => {
               transition={{ duration: 0.8 }}
               viewport={{ once: true }}
             >
-              <Badge className="bg-slate-900 text-white mb-6">About KAMAI</Badge>
+              <Badge className="bg-slate-900 text-white mb-6">About ArthaSetu</Badge>
               <h2 className="text-4xl font-bold text-slate-900 mb-6">
                 Built for India's Gig Economy
               </h2>
               <p className="text-lg text-slate-600 mb-6 leading-relaxed">
-                Unlike traditional fintech solutions built for salaried workers, KAMAI understands 
+                Unlike traditional fintech solutions built for salaried workers, ArthaSetu understands 
                 the unique challenges of gig work: daily volatility, seasonal fluctuations, weather 
                 dependencies, and cultural spending cycles.
               </p>
@@ -298,10 +327,10 @@ const LandingPage = () => {
                 ))}
               </div>
               <Button
-                onClick={() => navigate('/phases')}
+                onClick={() => navigate('/signup')}
                 className="bg-slate-900 hover:bg-slate-800 text-white"
               >
-                Learn How It Works
+                Start Using ArthaSetu
                 <ArrowRight className="ml-2" size={16} />
               </Button>
             </motion.div>
@@ -352,37 +381,52 @@ const LandingPage = () => {
             viewport={{ once: true }}
             className="text-center mb-16"
           >
-            <h2 className="text-4xl font-bold text-slate-900 mb-4">Meet Our Team</h2>
-            <p className="text-lg text-slate-600">
-              Built by AI researchers and ML engineers with deep expertise in financial technology
+            <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-slate-100 border border-slate-200 text-slate-800 text-xs font-semibold tracking-wider uppercase mb-4 shadow-sm">
+              Team Invictus
+            </div>
+            <h2 className="text-4xl font-bold text-slate-900 mb-4">Meet Team Invictus</h2>
+            <p className="text-lg text-slate-600 max-w-2xl mx-auto">
+              Driven by innovation: 2nd-year CSE & AIML engineers building intelligent, accessible financial technology for gig economy workers.
             </p>
           </motion.div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 lg:gap-8">
             {team.map((member, idx) => (
               <motion.div
                 key={member.name}
                 initial={{ opacity: 0, y: 20 }}
                 whileInView={{ opacity: 1, y: 0 }}
-                transition={{ delay: idx * 0.1 }}
+                transition={{ delay: idx * 0.08 }}
                 viewport={{ once: true }}
               >
-                <Card className="p-6 text-center hover:shadow-lg transition-shadow">
-                  <Avatar className="w-16 h-16 mx-auto mb-4">
-                    <AvatarFallback className="bg-slate-900 text-white text-lg font-semibold">
-                      {member.initials}
-                    </AvatarFallback>
-                  </Avatar>
-                  <h3 className="font-semibold text-slate-900 mb-2">{member.name}</h3>
-                  <p className="text-sm text-slate-600 mb-4 leading-relaxed">{member.role}</p>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => window.open(member.linkedin, '_blank')}
-                    className="text-slate-600 hover:text-slate-900"
-                  >
-                    <Linkedin size={16} />
-                  </Button>
+                <Card className="p-6 text-center hover:shadow-xl hover:-translate-y-1 transition-all duration-300 rounded-2xl border border-slate-200/80 bg-white h-full flex flex-col justify-between shadow-sm">
+                  <div>
+                    <Avatar className="w-16 h-16 mx-auto mb-4 ring-4 ring-slate-100 shadow-sm overflow-hidden">
+                      {member.image && (
+                        <AvatarImage src={member.image} alt={member.name} className="object-cover w-full h-full" />
+                      )}
+                      <AvatarFallback className="bg-slate-900 text-white text-lg font-bold">
+                        {member.initials}
+                      </AvatarFallback>
+                    </Avatar>
+
+                    <h3 className="font-semibold text-slate-900 text-lg mb-1.5">{member.name}</h3>
+
+                    <div className="flex flex-wrap items-center justify-center gap-1.5 mb-3">
+                      <span className="text-[11px] font-medium text-slate-600 bg-slate-100 px-2.5 py-0.5 rounded-full">
+                        {member.yearSection}
+                      </span>
+                      {member.isLeader && (
+                        <span className="text-[11px] font-semibold text-amber-700 bg-amber-50 border border-amber-200/80 px-2.5 py-0.5 rounded-full">
+                          Team Leader
+                        </span>
+                      )}
+                    </div>
+
+                    <p className="text-sm text-slate-600 leading-relaxed font-normal">
+                      {member.role}
+                    </p>
+                  </div>
                 </Card>
               </motion.div>
             ))}
@@ -417,10 +461,10 @@ const LandingPage = () => {
               <Button
                 variant="outline"
                 size="lg"
-                onClick={() => navigate('/features')}
+                onClick={() => navigate('/login')}
                 className="bg-transparent border-slate-600 text-slate-300 hover:bg-slate-800 hover:text-white px-8 py-6 text-lg font-medium"
               >
-                Explore Features
+                Sign In
               </Button>
             </div>
           </motion.div>

@@ -1,6 +1,6 @@
 <div align="center">
 
-# KAMAI
+# ArthaSetu
 
 ### AI-Powered Financial Companion for India's Gig Workers
 
@@ -20,7 +20,7 @@
 
 ## What this is
 
-Kamai is a financial companion for Indian gig workers (delivery riders, drivers, freelancers): daily-earnings tracking, feast/famine budgeting, presumptive-tax calculation, risk scoring, and savings/investment guidance, all computed from a user's real transaction history.
+ArthaSetu is a financial companion for Indian gig workers (delivery riders, drivers, freelancers): daily-earnings tracking, feast/famine budgeting, presumptive-tax calculation, risk scoring, and savings/investment guidance, all computed from a user's real transaction history.
 
 **Core design decision:** the numbers are computed by deterministic Python, not guessed by an LLM. Tax slabs, debt-to-income ratios, budget splits, and volatility forecasts come from real formulas in `backend/agents/finance_helpers.py`. The LLM (Gemini 2.5 Flash, with Groq as fallback) is used only to phrase already-computed numbers into a short plain-language explanation — never to invent the numbers themselves. This matters for a finance app: a hallucinated tax figure is a compliance problem, not a UX quirk.
 
@@ -146,7 +146,7 @@ GitHub Actions (`.github/workflows/`) runs this suite plus frontend lint/typeche
 ## Project structure
 
 ```
-Kamai-Financial-Companion/
+ArthaSetu/
 ├── backend/
 │   ├── agents/              # 9 live agents + finance_helpers.py (shared compute/fetch/write)
 │   ├── tests/                # pytest suite for finance_helpers.py

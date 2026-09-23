@@ -9,7 +9,7 @@ export const Header: React.FC = () => {
   const location = useLocation();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
-  const isPublicRoute = ['/', '/features', '/phases'].includes(location.pathname);
+  const isPublicRoute = location.pathname === '/';
 
   if (!isPublicRoute) {
     return null; // Don't show header on protected routes (they have their own layout)
@@ -17,9 +17,21 @@ export const Header: React.FC = () => {
 
   const navItems = [
     { label: 'Home', path: '/' },
-    { label: 'Features', path: '/features' },
-    { label: 'Architecture', path: '/phases' },
+    { label: 'Features', path: '#features' },
+    { label: 'About', path: '#about' },
   ];
+
+  const handleNavClick = (path: string) => {
+    if (path.startsWith('#')) {
+      const el = document.getElementById(path.substring(1));
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth' });
+      }
+    } else {
+      navigate(path);
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  };
 
   const isActive = (path: string) => location.pathname === path;
 
@@ -29,13 +41,16 @@ export const Header: React.FC = () => {
         <div className="flex items-center justify-between h-16">
           {/* Logo */}
           <button
-            onClick={() => navigate('/')}
-            className="flex items-center gap-2 font-bold text-slate-900 hover:text-slate-700 transition-colors"
+            onClick={() => {
+              navigate('/');
+              window.scrollTo({ top: 0, behavior: 'smooth' });
+            }}
+            className="flex items-center gap-2.5 font-bold text-slate-900 hover:text-slate-700 transition-colors"
           >
-            <div className="w-8 h-8 rounded-lg bg-gradient-to-r from-slate-900 to-slate-700 flex items-center justify-center">
-              <Brain className="text-white" size={18} />
+            <div className="w-8 h-8 rounded-lg bg-black flex items-center justify-center p-1 shadow-sm border border-slate-800">
+              <img src="/arthasetu-logo.png" alt="ArthaSetu Logo" className="w-full h-full object-contain" />
             </div>
-            <span className="text-lg">KAMAI</span>
+            <span className="text-xl font-bold tracking-tight text-slate-900">ArthaSetu</span>
           </button>
 
           {/* Desktop Navigation */}
@@ -43,7 +58,7 @@ export const Header: React.FC = () => {
             {navItems.map((item) => (
               <button
                 key={item.path}
-                onClick={() => navigate(item.path)}
+                onClick={() => handleNavClick(item.path)}
                 className={`px-3 py-2 text-sm font-medium transition-colors ${
                   isActive(item.path)
                     ? 'text-slate-900 border-b-2 border-slate-900'
@@ -89,7 +104,7 @@ export const Header: React.FC = () => {
                 <button
                   key={item.path}
                   onClick={() => {
-                    navigate(item.path);
+                    handleNavClick(item.path);
                     setIsMobileMenuOpen(false);
                   }}
                   className={`px-3 py-2 text-left text-sm font-medium transition-colors ${

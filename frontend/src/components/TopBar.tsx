@@ -32,7 +32,7 @@ const TopBar = () => {
   const { isOpen, toggle } = useSidebar();
   const navigate = useNavigate();
 
-  const currentPageTitle = pageTitles[location.pathname] || "Agente AI";
+  const currentPageTitle = pageTitles[location.pathname] || "ArthaSetu";
 
   const handleLogout = () => {
     logout();
@@ -41,9 +41,17 @@ const TopBar = () => {
 
   return (
     <div className="sticky top-0 z-30 bg-background/95 backdrop-blur-md border-b border-border/40">
-      <div className="flex items-center px-6 md:px-10 h-[56px]">
+      <div className="flex items-center px-4 md:px-10 h-[56px]">
         {/* Left: Toggle Button */}
         <div className="flex items-center">
+          {/* Mobile Toggle Button (opens the drawer on phones) */}
+          <button
+            onClick={toggle}
+            className="md:hidden flex items-center justify-center w-9 h-9 -ml-1 rounded-[4px] hover:bg-muted/60 transition-colors"
+            title="Open menu"
+          >
+            <Menu size={20} className="text-muted-foreground" />
+          </button>
           {/* Desktop Toggle Button */}
           <button
             onClick={toggle}

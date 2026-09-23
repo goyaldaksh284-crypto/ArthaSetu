@@ -104,8 +104,17 @@ const Signup = () => {
                 className="space-y-6"
               >
                 <div>
-                  <h2 className="text-2xl font-bold mb-2">Let's get started</h2>
-                  <p className="text-muted-foreground">Create your Agente AI account</p>
+                  <div className="flex items-center gap-3 mb-4">
+                    <div className="w-10 h-10 rounded-xl bg-black flex items-center justify-center p-1.5 shadow-md border border-slate-800 flex-shrink-0">
+                      <img src="/arthasetu-logo.png" alt="ArthaSetu" className="w-full h-full object-contain" />
+                    </div>
+                    <div>
+                      <h1 className="text-xl font-bold tracking-tight text-foreground">ArthaSetu</h1>
+                      <p className="text-xs text-muted-foreground">Financial Companion</p>
+                    </div>
+                  </div>
+                  <h2 className="text-2xl font-bold mb-1">Let's get started</h2>
+                  <p className="text-muted-foreground">Create your ArthaSetu account</p>
                 </div>
                 <div className="space-y-4">
                   <div className="space-y-2">

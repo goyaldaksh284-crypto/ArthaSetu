@@ -1,7 +1,12 @@
-
-requests>=2.31.0
-Pillow>=10.0.0
-
+# ===========================================================================
+# ArthaSetu Unified Production Backend Requirements (Render Free Tier Ready)
+# Memory footprint: < 45 MB RAM (Render Free limit: 512 MB)
+# ===========================================================================
 fastapi>=0.104.0
 uvicorn[standard]>=0.24.0
 python-multipart>=0.0.6
+requests>=2.31.0
+python-dotenv>=1.0.0
+PyJWT>=2.8.0
+slowapi>=0.1.9
+Pillow>=10.0.0

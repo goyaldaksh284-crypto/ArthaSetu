@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Card } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
@@ -9,14 +9,14 @@ import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { CalendarIcon, Upload, Mic, PenLine, ChevronDown, ChevronUp, Square } from "lucide-react";
+import { CalendarIcon, Upload, Mic, PenLine, ChevronDown, ChevronUp, Square, Loader2, ScanText } from "lucide-react";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
 import db from "@/services/database";
+import { imageProcessor, validateImageFile, preloadScanner } from "@/lib/imageProcessor";
+import { voiceProcessor } from "@/lib/voiceProcessor";
+import type { ExtractedTransaction } from "@/lib/transactionExtractor";
 import { toast } from "sonner";
-
-// API endpoint for transaction parser (update this to match your server)
-const PARSER_API_URL = import.meta.env.VITE_PARSER_API_URL || "http://localhost:8001/api";
 
 interface TransactionInputCardProps {
   onSuccess?: () => void;
@@ -27,9 +27,13 @@ const TransactionInputCard = ({ onSuccess }: TransactionInputCardProps) => {
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
-  const [isRecording, setIsRecording] = useState(false);
-  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
-  const audioChunksRef = useRef<Blob[]>([]);
+  const [progressLabel, setProgressLabel] = useState("");
+  const [ocrText, setOcrText] = useState("");
+  const [lastConfidence, setLastConfidence] = useState<number | null>(null);
+  const [isListening, setIsListening] = useState(false);
+  const [liveTranscript, setLiveTranscript] = useState("");
+  const [voiceStatus, setVoiceStatus] = useState("");
+  const [micSupported] = useState(() => voiceProcessor.isSupported());
 
   // Manual transaction form state
   const [formData, setFormData] = useState({
@@ -58,6 +62,16 @@ const TransactionInputCard = ({ onSuccess }: TransactionInputCardProps) => {
   const paymentMethods = ["UPI", "Cash", "Card", "Bank Transfer"];
   const recurringFrequencies = ["Daily", "Weekly", "Monthly", "Custom"];
 
+  // Stop any in-flight speech recognition if the card unmounts mid-session,
+  // and warm up the OCR engine whenever the Image tab is opened.
+  useEffect(() => {
+    return () => voiceProcessor.abort();
+  }, []);
+
+  useEffect(() => {
+    if (activeMode === "image") preloadScanner();
+  }, [activeMode]);
+
   const handleManualSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formData.amount || !formData.category) {
@@ -83,7 +97,11 @@ const TransactionInputCard = ({ onSuccess }: TransactionInputCardProps) => {
         is_recurring: formData.is_recurring,
         recurring_frequency: formData.recurring_frequency || undefined,
         tags: formData.tags.length > 0 ? formData.tags : undefined,
+        input_method: pendingInputMethod.current,
+        confidence_score: pendingConfidence.current,
       });
+      pendingInputMethod.current = "manual";
+      pendingConfidence.current = undefined;
       toast.success("Transaction added successfully!");
       // Reset form
       setFormData({
@@ -103,6 +121,8 @@ const TransactionInputCard = ({ onSuccess }: TransactionInputCardProps) => {
         is_recurring: false,
         recurring_frequency: "",
       });
+      setOcrText("");
+      setLastConfidence(null);
       onSuccess?.();
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Failed to add transaction");
@@ -111,167 +131,121 @@ const TransactionInputCard = ({ onSuccess }: TransactionInputCardProps) => {
     }
   };
 
+  /**
+   * Fill the manual form with data extracted from a receipt scan or a voice
+   * command and switch to the manual tab so the user can review it. The raw
+   * recognized text (OCR output / transcript) goes into the Description field.
+   * Never invents values: anything the extractor couldn't find is left blank.
+   */
+  const applyExtracted = (data: ExtractedTransaction, inputMethod: "image" | "voice", rawText?: string) => {
+    const validCategories = categories[data.type];
+    const category = validCategories.includes(data.category)
+      ? data.category
+      : validCategories[validCategories.length - 1];
+
+    setFormData((prev) => ({
+      ...prev,
+      amount: data.amount !== null ? String(data.amount) : "",
+      transaction_type: data.type,
+      category,
+      merchant_name: data.merchant || "",
+      description: rawText?.trim() || data.description || "",
+      payment_method: paymentMethods.includes(data.paymentMethod as (typeof paymentMethods)[number])
+        ? data.paymentMethod
+        : "",
+      source: data.merchant || "",
+      transaction_date: data.date ? new Date(`${data.date}T00:00:00`) : new Date(),
+      transaction_time: data.time || prev.transaction_time,
+      tags: prev.tags,
+      is_recurring: prev.is_recurring,
+      recurring_frequency: prev.recurring_frequency,
+    }));
+    // The Description field lives inside the "More Details" section — open it
+    // so the recognized text is visible right away.
+    if (rawText && rawText.trim()) {
+      setShowAdvanced(true);
+    }
+    // Stash how this row was captured so it is saved with the transaction.
+    pendingInputMethod.current = inputMethod;
+    pendingConfidence.current = data.confidence;
+
+    setLastConfidence(data.confidence);
+    setActiveMode("manual");
+
+    if (data.amount === null) {
+      toast.warning(
+        inputMethod === "image"
+          ? "Scanned the receipt, but couldn't detect the amount — please enter it manually."
+          : "Heard you, but couldn't detect an amount — please enter it manually.",
+      );
+    } else {
+      toast.success(
+        `Transaction extracted with ${Math.round(data.confidence * 100)}% confidence. Please review and confirm.`,
+      );
+    }
+  };
+
+  // Carried into db.transactions.create on submit (see handleManualSubmit).
+  const pendingInputMethod = useRef<"manual" | "image" | "voice">("manual");
+  const pendingConfidence = useRef<number | undefined>(undefined);
+
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    e.target.value = "";
+
+    try {
+      validateImageFile(file);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Invalid image");
+      return;
+    }
 
     setIsProcessing(true);
-    toast.info("Processing image...");
+    setProgressLabel("Loading scanner...");
+    setOcrText("");
 
     try {
-      const uploadFormData = new FormData();
-      uploadFormData.append("file", file);
-
-      const response = await fetch(`${PARSER_API_URL}/parse-image`, {
-        method: "POST",
-        body: uploadFormData,
+      const data = await imageProcessor.extractTransactionFromImage(file, (status) => {
+        setProgressLabel(status);
       });
-
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-
-      const result = await response.json();
-
-      if (result.error) {
-        toast.error(result.error);
-        return;
-      }
-
-      // Fill form with extracted data
-      const parsedDate = result.transaction_date
-        ? new Date(result.transaction_date)
-        : new Date();
-
-      setFormData((prev) => ({
-        ...prev,
-        amount: result.amount?.toString() || "",
-        transaction_type: (result.transaction_type || "expense") as "income" | "expense",
-        category: result.category || "",
-        merchant_name: result.merchant_name || "",
-        description: result.description || "",
-        payment_method: result.payment_method || "",
-        location: result.location || "",
-        transaction_date: parsedDate,
-        transaction_time: result.transaction_time || prev.transaction_time,
-      }));
-
-      // Switch to manual tab for review
-      setActiveMode("manual");
-      const confidence = result.confidence ? (result.confidence * 100).toFixed(0) : "N/A";
-      toast.success(`Transaction extracted! (Confidence: ${confidence}%) Please review and confirm.`);
+      setOcrText(data.text);
+      applyExtracted(data, "image", data.text);
     } catch (error) {
-      console.error("Error processing image:", error);
-      toast.error(
-        error instanceof Error
-          ? `Failed to process image: ${error.message}`
-          : "Failed to process image. Make sure the parser API server is running."
-      );
+      toast.error(error instanceof Error ? error.message : "Failed to process image");
     } finally {
       setIsProcessing(false);
-      // Reset file input
-      e.target.value = "";
+      setProgressLabel("");
     }
   };
 
-  const startVoiceRecording = async () => {
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const mediaRecorder = new MediaRecorder(stream);
-      mediaRecorderRef.current = mediaRecorder;
-      audioChunksRef.current = [];
-
-      mediaRecorder.ondataavailable = (event) => {
-        if (event.data.size > 0) {
-          audioChunksRef.current.push(event.data);
-        }
-      };
-
-      mediaRecorder.onstop = async () => {
-        const audioBlob = new Blob(audioChunksRef.current, { type: "audio/wav" });
-        await processVoiceRecording(audioBlob);
-        stream.getTracks().forEach((track) => track.stop());
-      };
-
-      mediaRecorder.start();
-      setIsRecording(true);
-      toast.info("Recording... Click stop when done.");
-    } catch (error) {
-      console.error("Error accessing microphone:", error);
-      toast.error("Could not access microphone. Please check permissions.");
+  const handleVoiceRecord = async () => {
+    if (isListening) {
+      voiceProcessor.stopListening();
+      return;
     }
-  };
 
-  const stopVoiceRecording = () => {
-    if (mediaRecorderRef.current && isRecording) {
-      mediaRecorderRef.current.stop();
-      setIsRecording(false);
-      toast.info("Processing voice...");
+    if (!micSupported) {
+      toast.error("Speech recognition is not supported in this browser. Please use Chrome or Edge.");
+      return;
     }
-  };
 
-  const processVoiceRecording = async (audioBlob: Blob) => {
-    setIsProcessing(true);
+    setIsListening(true);
+    setLiveTranscript("");
+    setVoiceStatus("");
 
     try {
-      const uploadFormData = new FormData();
-      uploadFormData.append("file", audioBlob, "recording.wav");
-
-      const response = await fetch(`${PARSER_API_URL}/parse-voice`, {
-        method: "POST",
-        body: uploadFormData,
+      const transcript = await voiceProcessor.startListening({
+        onInterim: setLiveTranscript,
+        onStatus: setVoiceStatus,
       });
-
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-
-      const result = await response.json();
-
-      if (result.error) {
-        toast.error(result.error);
-        return;
-      }
-
-      // Fill form with extracted data
-      const parsedDate = result.transaction_date
-        ? new Date(result.transaction_date)
-        : new Date();
-
-      setFormData((prev) => ({
-        ...prev,
-        amount: result.amount?.toString() || "",
-        transaction_type: (result.transaction_type || "expense") as "income" | "expense",
-        category: result.category || "",
-        merchant_name: result.merchant_name || "",
-        description: result.description || "",
-        payment_method: result.payment_method || "",
-        location: result.location || "",
-        transaction_date: parsedDate,
-        transaction_time: result.transaction_time || prev.transaction_time,
-      }));
-
-      // Switch to manual tab for review
-      setActiveMode("manual");
-      const confidence = result.confidence ? (result.confidence * 100).toFixed(0) : "N/A";
-      toast.success(`Transaction extracted! (Confidence: ${confidence}%) Please review and confirm.`);
+      setLiveTranscript(transcript);
+      const data = await voiceProcessor.extractTransactionDataAI(transcript);
+      applyExtracted(data, "voice", transcript);
     } catch (error) {
-      console.error("Error processing voice:", error);
-      toast.error(
-        error instanceof Error
-          ? `Failed to process voice: ${error.message}`
-          : "Failed to process voice. Make sure the parser API server is running."
-      );
+      toast.error(error instanceof Error ? error.message : "Could not process your voice. Please try again.");
     } finally {
-      setIsProcessing(false);
-    }
-  };
-
-  const handleVoiceRecord = () => {
-    if (isRecording) {
-      stopVoiceRecording();
-    } else {
-      startVoiceRecording();
+      setIsListening(false);
     }
   };
 
@@ -505,7 +479,7 @@ const TransactionInputCard = ({ onSuccess }: TransactionInputCardProps) => {
                 <Input
                   id="image-upload"
                   type="file"
-                  accept="image/*"
+                  accept="image/jpeg,image/jpg,image/png,image/webp,image/bmp"
                   className="hidden"
                   onChange={handleImageUpload}
                   disabled={isProcessing}
@@ -516,47 +490,85 @@ const TransactionInputCard = ({ onSuccess }: TransactionInputCardProps) => {
               </Label>
               <p className="text-sm text-muted-foreground mt-2">
                 {isProcessing
-                  ? "Extracting transaction details..."
-                  : "We'll extract transaction details automatically"}
+                  ? progressLabel || "Extracting transaction details..."
+                  : "Your receipt is read right in the browser — we'll extract the amount, merchant and category automatically"}
               </p>
             </div>
+
+            {ocrText && !isProcessing && (
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <Label className="flex items-center gap-2">
+                    <ScanText className="w-4 h-4" />
+                    Text we read from the receipt:
+                  </Label>
+                  {lastConfidence !== null && (
+                    <span className="text-xs text-muted-foreground">
+                      {Math.round(lastConfidence * 100)}% confident
+                    </span>
+                  )}
+                </div>
+                <div className="p-3 bg-muted rounded-lg text-xs max-h-32 overflow-y-auto">
+                  {ocrText}
+                </div>
+              </div>
+            )}
           </div>
         </TabsContent>
 
         {/* Voice Mode */}
         <TabsContent value="voice">
           <div className="space-y-4">
+            {!micSupported && (
+              <div className="p-4 border border-amber-300 bg-amber-50 text-amber-800 rounded-lg text-sm">
+                Speech recognition is not supported in this browser. Please use Google Chrome or
+                Microsoft Edge to add transactions by voice.
+              </div>
+            )}
             <div className="border-2 border-dashed rounded-lg p-8 text-center">
               <Mic className={cn(
                 "w-12 h-12 mx-auto mb-4",
-                isRecording ? "text-red-500 animate-pulse" : "text-muted-foreground"
+                isListening ? "text-red-500 animate-pulse" : "text-muted-foreground"
               )} />
               <Button
                 type="button"
                 onClick={handleVoiceRecord}
                 size="lg"
-                disabled={isProcessing}
-                variant={isRecording ? "destructive" : "default"}
+                disabled={isProcessing || !micSupported}
+                variant={isListening ? "destructive" : "default"}
               >
-                {isRecording ? (
+                {isProcessing ? (
+                  <>
+                    <Loader2 className="w-5 h-5 mr-2 animate-spin" />
+                    Processing...
+                  </>
+                ) : isListening ? (
                   <>
                     <Square className="w-5 h-5 mr-2" />
-                    Stop Recording
+                    Stop Listening
                   </>
                 ) : (
                   <>
                     <Mic className="w-5 h-5 mr-2" />
-                    Start Recording
+                    Start Listening
                   </>
                 )}
               </Button>
               <p className="text-sm text-muted-foreground mt-2">
-                {isRecording
-                  ? "Recording... Click stop when done"
-                  : isProcessing
-                  ? "Processing your voice..."
-                  : "Speak your transaction details naturally"}
+                {isListening
+                  ? voiceStatus || "Listening... speak like \"I spent 250 rupees on petrol\""
+                  : "Tap, then speak your transaction naturally"}
               </p>
+              {isListening && (
+                <div className="mt-4 space-y-2">
+                  {voiceStatus && (
+                    <p className="text-xs text-muted-foreground animate-pulse">{voiceStatus}</p>
+                  )}
+                  <div className="p-3 bg-muted rounded-lg text-sm min-h-12">
+                    {liveTranscript || <span className="text-muted-foreground">Say something...</span>}
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </TabsContent>
@@ -566,5 +578,3 @@ const TransactionInputCard = ({ onSuccess }: TransactionInputCardProps) => {
 };
 
 export default TransactionInputCard;
-
-

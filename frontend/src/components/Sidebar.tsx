@@ -22,7 +22,6 @@ import {
   PiggyBank,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { motion } from "framer-motion";
 
 const Sidebar = () => {
   const navigate = useNavigate();
@@ -138,44 +137,53 @@ const Sidebar = () => {
 
   return (
     <>
-      {/* Mobile Toggle Button */}
-      <motion.button
-        onClick={() => setIsOpen(!isOpen)}
-        className="fixed top-4 left-4 z-50 md:hidden bg-gradient-to-br from-slate-900 to-slate-700 text-white p-2.5 rounded-lg shadow-lg hover:shadow-xl transition-shadow"
-        whileHover={{ scale: 1.05 }}
-        whileTap={{ scale: 0.95 }}
-      >
-        {isOpen ? <X size={24} /> : <Menu size={24} />}
-      </motion.button>
-
-      {/* Sidebar - Desktop sticky, Mobile overlay */}
-      <motion.div
-        initial={false}
-        animate={{ 
-          x: isOpen ? 0 : -300,
-        }}
-        transition={{ duration: 0.3 }}
+      {/* Sidebar - Desktop sticky (rail when collapsed), Mobile overlay drawer.
+          Driven purely by CSS classes so the md: breakpoints behave:
+            open            -> 256px drawer/rail
+            closed desktop  -> 80px icon rail
+            closed mobile   -> off-screen                            */}
+      <div
         className={cn(
           "fixed left-0 top-0 h-screen bg-background border-r border-border/40 backdrop-blur-sm transition-all duration-300 z-40 shadow-[0_0_1px_0_rgba(0,0,0,0.1)] flex flex-col overflow-hidden",
-          isOpen ? "translate-x-0 w-64" : "-translate-x-full md:translate-x-0 md:w-20"
+          isOpen ? "w-64 translate-x-0" : "w-64 -translate-x-full md:translate-x-0 md:w-20"
         )}
       >
         {/* Logo Section */}
         <div className="px-4 py-3.5 border-b border-border/30 relative">
-          <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-[4px] bg-gradient-to-br from-slate-900 to-slate-700 flex items-center justify-center text-white font-semibold text-[13px] flex-shrink-0">
-              <Zap size={16} />
+          <button
+            onClick={() => {
+              if (window.innerWidth < 768) {
+                setIsOpen(false);
+              }
+              navigate("/");
+              window.scrollTo({ top: 0, behavior: "smooth" });
+            }}
+            className="flex items-center gap-2.5 text-left group transition-opacity hover:opacity-80 cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary rounded-lg"
+            title="Go to Landing Page"
+            aria-label="ArthaSetu Home"
+          >
+            <div className="w-8 h-8 rounded-lg bg-black flex items-center justify-center p-1 flex-shrink-0 shadow-sm border border-slate-800 group-hover:scale-105 transition-transform">
+              <img src="/arthasetu-logo.png" alt="ArthaSetu Logo" className="w-full h-full object-contain" />
             </div>
             {isOpen && (
               <div className="overflow-hidden">
-                <p className="text-[15px] font-semibold tracking-tight text-foreground whitespace-nowrap">
-                KAMAI
-              </p>
+                <p className="text-[15px] font-bold tracking-tight text-foreground whitespace-nowrap group-hover:text-primary transition-colors">
+                  ArthaSetu
+                </p>
                 <p className="text-[11px] text-muted-foreground whitespace-nowrap">Financial Companion</p>
-            </div>
+              </div>
             )}
-          </div>
+          </button>
           
+          {/* Mobile close button (drawer overlays the TopBar on phones) */}
+          <button
+            onClick={() => setIsOpen(false)}
+            className="md:hidden absolute top-1/2 -translate-y-1/2 right-3 w-8 h-8 flex items-center justify-center rounded-[4px] hover:bg-muted/60 transition-colors"
+            title="Close menu"
+          >
+            <X size={18} className="text-muted-foreground" />
+          </button>
+
           {/* Desktop Toggle Button */}
           <button
             onClick={() => setIsOpen(!isOpen)}
@@ -227,7 +235,7 @@ const Sidebar = () => {
           })}
         </nav>
 
-      </motion.div>
+      </div>
 
       {/* Mobile Overlay */}
       {isOpen && (

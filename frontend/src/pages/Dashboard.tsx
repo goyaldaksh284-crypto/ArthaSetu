@@ -304,6 +304,7 @@ const Dashboard = () => {
                 </div>
         </div>
 
+
       {/* Recent Transactions - Section with divider */}
       {recentTransactions.length > 0 && (
         <div>

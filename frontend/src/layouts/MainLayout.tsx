@@ -27,7 +27,7 @@ const MainLayout = ({ children, className }: MainLayoutProps) => {
 
         {/* Scrollable Content Area */}
         <div className="flex-1 overflow-y-auto relative">
-          <div className={cn("p-6 md:p-10 max-w-7xl mx-auto", className)}>
+          <div className={cn("p-4 sm:p-6 md:p-10 max-w-7xl mx-auto", className)}>
             {children}
           </div>
         </div>

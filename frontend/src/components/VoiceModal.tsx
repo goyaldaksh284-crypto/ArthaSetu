@@ -46,12 +46,12 @@ const VoiceModal = ({ open, onClose, onConfirm }: VoiceModalProps) => {
 
       const result = await voiceProcessor.startListening();
       setTranscript(result);
-      
+
       // Process the transcript
       setIsProcessing(true);
       const data = voiceProcessor.extractTransactionData(result);
       setExtractedData(data);
-      
+
       // Auto-fill form with extracted data
       setFormData(prev => ({
         ...prev,
@@ -61,12 +61,12 @@ const VoiceModal = ({ open, onClose, onConfirm }: VoiceModalProps) => {
         description: data.description || result,
         merchant: data.merchant || ""
       }));
-      
+
       setIsProcessing(false);
       setIsListening(false);
     } catch (error) {
       console.error("Voice recognition error:", error);
-      toast.error("Failed to process voice input");
+      toast.error(error instanceof Error ? error.message : "Failed to process voice input");
       setIsListening(false);
       setIsProcessing(false);
     }
@@ -94,6 +94,7 @@ const VoiceModal = ({ open, onClose, onConfirm }: VoiceModalProps) => {
   };
 
   const handleClose = () => {
+    voiceProcessor.abort();
     setTranscript("");
     setExtractedData(null);
     setIsListening(false);
@@ -318,14 +319,6 @@ const VoiceModal = ({ open, onClose, onConfirm }: VoiceModalProps) => {
               Add Transaction
             </Button>
           </div>
-        </div>
-      </DialogContent>
-    </Dialog>
-  );
-};
-          <p className="mt-2 text-sm text-muted-foreground">
-            Say something like "I spent 150 on lunch"
-          </p>
         </div>
       </DialogContent>
     </Dialog>

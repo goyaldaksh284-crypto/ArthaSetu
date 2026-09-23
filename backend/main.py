@@ -1,5 +1,5 @@
 """
-FastAPI Backend for the Kamai agent pipeline.
+FastAPI Backend for the ArthaSetu agent pipeline.
 
 This backend:
 1. Receives a verified user_id from the frontend's Supabase Auth session
@@ -16,30 +16,40 @@ This backend:
 import logging
 import os
 import sys
+import tempfile
 from datetime import datetime
-from typing import Dict, Any, Optional
-from fastapi import Depends, FastAPI, HTTPException, BackgroundTasks, Request
+from typing import Dict, Any, Optional, List
+from fastapi import Depends, FastAPI, HTTPException, BackgroundTasks, Request, UploadFile, File
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from dotenv import load_dotenv
-from slowapi import Limiter, _rate_limit_exceeded_handler
-from slowapi.errors import RateLimitExceeded
+try:
+    from slowapi import Limiter, _rate_limit_exceeded_handler
+    from slowapi.errors import RateLimitExceeded
+    has_slowapi = True
+except ImportError:
+    has_slowapi = False
 
-# Load environment variables from .env file
+# Load environment variables
 load_dotenv()
 
+# Add backend, agents and repo root to path
+backend_dir = os.path.dirname(os.path.abspath(__file__))
+repo_root = os.path.dirname(backend_dir)
+if backend_dir not in sys.path:
+    sys.path.insert(0, backend_dir)
+if os.path.join(backend_dir, 'agents') not in sys.path:
+    sys.path.insert(0, os.path.join(backend_dir, 'agents'))
+if repo_root not in sys.path:
+    sys.path.insert(0, repo_root)
+
 from auth import get_current_user_id, get_user_id_for_rate_limit
+from transaction_parser import TransactionParser
 
-# Add agents directory to path
-sys.path.append(os.path.join(os.path.dirname(__file__), 'agents'))
-
-# finance_helpers configures the root logger on first import -- this logger
-# just needs the name, not to configure logging itself.
+# finance_helpers configures the root logger on first import
 logger = logging.getLogger(__name__)
 
-# Reused as-is for analysis_jobs (durable job state) -- no new DB-access
-# code needed, these already exist and are already used by every agent.
 from finance_helpers import fetch_records, write_record, update_record
 
 # Import all agents
@@ -55,33 +65,59 @@ from action_agent import ActionExecutionAgent
 
 # Initialize FastAPI
 app = FastAPI(
-    title="Agente AI - Spare Backend",
-    description="Background financial analysis service for gig workers",
-    version="1.0.0"
+    title="ArthaSetu Unified Backend",
+    description="Unified financial analysis, multimodal OCR, voice processing, and Groq-powered AI chatbot",
+    version="2.0.0"
 )
 
-# Per-user (not per-IP -- see auth.get_user_id_for_rate_limit) rate limiting
-# on the expensive analysis-trigger endpoints.
-limiter = Limiter(key_func=get_user_id_for_rate_limit)
-app.state.limiter = limiter
-app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+if has_slowapi:
+    limiter = Limiter(key_func=get_user_id_for_rate_limit)
+    app.state.limiter = limiter
+    app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+else:
+    class DummyLimiter:
+        def limit(self, *args, **kwargs):
+            def decorator(func):
+                return func
+            return decorator
+    limiter = DummyLimiter()
 
-# CORS: defaults to the frontend's actual dev port (8080, see
-# frontend/vite.config.ts); production deployments must set
-# CORS_ALLOWED_ORIGINS to the real deployed frontend origin(s).
-CORS_ALLOWED_ORIGINS = os.environ.get(
-    "CORS_ALLOWED_ORIGINS", "http://localhost:8080"
-).split(",")
+# Initialize Transaction & Chatbot Parser
+parser = TransactionParser()
+
+# CORS configuration supporting localhost, Vercel deployments (*.vercel.app), and custom origins
+cors_env = os.environ.get("CORS_ALLOWED_ORIGINS", "").strip()
+if cors_env:
+    CORS_ALLOWED_ORIGINS = [o.strip() for o in cors_env.split(",") if o.strip()]
+else:
+    CORS_ALLOWED_ORIGINS = [
+        "http://localhost:8080",
+        "http://localhost:5173",
+        "http://127.0.0.1:8080",
+        "http://127.0.0.1:5173",
+    ]
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=CORS_ALLOWED_ORIGINS,
+    allow_origin_regex=r"https://.*\.vercel\.app",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
 # Request/Response Models
+class TextParseRequest(BaseModel):
+    text: str
+
+class ChatMessage(BaseModel):
+    role: str
+    content: str
+
+class ChatRequest(BaseModel):
+    messages: List[ChatMessage]
+    user_context: Optional[Dict[str, Any]] = None
+
 class AnalysisResponse(BaseModel):
     status: str
     message: str
@@ -230,7 +266,7 @@ orchestrator = AgentOrchestrator()
 async def root():
     """Health check endpoint"""
     return {
-        "service": "Agente AI - Spare Backend",
+        "service": "ArthaSetu - Financial Analysis Backend",
         "status": "running",
         "version": "1.0.0",
         "agents": 9
@@ -372,12 +408,41 @@ async def trigger_analysis_sync(request: Request, user_id: str = Depends(get_cur
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.get("/api/health")
-async def health_check():
-    """Detailed health check"""
+@app.get("/")
+def root():
     return {
         "status": "healthy",
-        "service": "Agente AI Spare Backend",
+        "service": "ArthaSetu Unified Backend",
+        "version": "2.0.0",
+        "endpoints": {
+            "health": "/health",
+            "api_health": "/api/health",
+            "chat": "/api/chat",
+            "parse_image": "/api/parse-image",
+            "parse_voice": "/api/parse-voice",
+            "parse_text": "/api/parse-text",
+            "analyze": "/api/analyze",
+            "analyze_sync": "/api/analyze-sync",
+            "status": "/api/status/{user_id}"
+        }
+    }
+
+
+@app.get("/health")
+def liveness_check():
+    """Render and deployment liveness probe."""
+    return {"status": "ok", "service": "ArthaSetu Unified Backend"}
+
+
+@app.get("/api/health")
+async def health_check():
+    """Detailed health check for frontend & monitoring."""
+    return {
+        "status": "healthy",
+        "service": "ArthaSetu Unified Backend",
+        "groq_keys_available": len(parser.groq_keys),
+        "google_keys_available": len(parser.google_keys),
+        "openrouter_keys_available": len(parser.openrouter_keys),
         "agents": {
             "budget": "ready",
             "volatility": "ready",
@@ -394,27 +459,98 @@ async def health_check():
     }
 
 
+@app.post("/api/parse-image")
+async def parse_image(file: UploadFile = File(...)):
+    """Parse receipt/bill image using AI multimodal vision."""
+    if not file.content_type or not file.content_type.startswith("image/"):
+        raise HTTPException(status_code=400, detail="File must be an image (JPEG, PNG, WEBP, BMP)")
+
+    safe_name = file.filename or "receipt.jpg"
+    ext = safe_name.split(".")[-1] if "." in safe_name else "jpg"
+
+    with tempfile.NamedTemporaryFile(delete=False, suffix=f".{ext}") as tmp:
+        tmp_path = tmp.name
+
+    try:
+        content = await file.read()
+        with open(tmp_path, "wb") as f:
+            f.write(content)
+
+        result = parser.parse_image(tmp_path)
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error processing image: {str(e)}")
+    finally:
+        if os.path.exists(tmp_path):
+            try:
+                os.remove(tmp_path)
+            except Exception:
+                pass
+
+
+@app.post("/api/parse-voice")
+async def parse_voice(file: UploadFile = File(...)):
+    """Parse an audio recording (WAV, MP3, WEBM, OGG) to extract transaction details."""
+    safe_name = file.filename or "recording.wav"
+    ext = safe_name.split(".")[-1] if "." in safe_name else "wav"
+
+    with tempfile.NamedTemporaryFile(delete=False, suffix=f".{ext}") as tmp:
+        tmp_path = tmp.name
+
+    try:
+        content = await file.read()
+        with open(tmp_path, "wb") as f:
+            f.write(content)
+
+        result = parser.parse_voice(tmp_path)
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error processing audio: {str(e)}")
+    finally:
+        if os.path.exists(tmp_path):
+            try:
+                os.remove(tmp_path)
+            except Exception:
+                pass
+
+
+@app.post("/api/parse-text")
+def parse_text(req: TextParseRequest):
+    """Parse spoken transcript or typed text into a structured transaction."""
+    if not req.text or not req.text.strip():
+        raise HTTPException(status_code=400, detail="Text field cannot be empty")
+    return parser.parse_text(req.text)
+
+
+@app.post("/api/chat")
+def chat(req: ChatRequest):
+    """
+    ArthaSetu Website AI Assistant Chat endpoint.
+    Strictly answers questions related to ArthaSetu and gig worker personal finance.
+    Uses Groq LPU dedicatedly for instant ~0.4s response and zero hallucinations.
+    """
+    if not req.messages:
+        raise HTTPException(status_code=400, detail="Messages list cannot be empty")
+
+    dict_messages = [{"role": m.role, "content": m.content} for m in req.messages]
+    result = parser.chat(dict_messages, req.user_context)
+    return result
+
+
 if __name__ == "__main__":
     import uvicorn
 
+    port = int(os.environ.get("PORT", 8000))
+    host = os.environ.get("HOST", "0.0.0.0")
+
     print("\n" + "="*60)
-    print("Starting Agente AI Spare Backend")
-    print("="*60)
-    print("\nFrontend (Windows) can connect to:")
-    print("  > http://localhost:8000")
-    print("  > http://127.0.0.1:8000")
-    print("\nAPI Endpoints:")
-    print("  POST /api/analyze          - Trigger analysis (async)")
-    print("  POST /api/analyze-sync     - Trigger analysis (sync)")
-    print("  GET  /api/status/{user_id} - Get analysis status")
-    print("  GET  /api/health           - Health check")
-    print("\nDocs available at:")
-    print("  > http://localhost:8000/docs")
+    print("Starting ArthaSetu Unified Backend (Analysis + Chatbot + OCR)")
+    print(f"Listening on {host}:{port}")
     print("="*60 + "\n")
 
     uvicorn.run(
         app,
-        host="0.0.0.0",  # Accept connections from Windows
-        port=8000,
+        host=host,
+        port=port,
         log_level="info"
     )

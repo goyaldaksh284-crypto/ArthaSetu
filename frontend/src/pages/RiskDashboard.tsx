@@ -179,7 +179,7 @@ const RiskDashboard = () => {
             <HelpTooltip text="Part of your income that goes into EMIs and loan payments." />
           </div>
           <p className="text-2xl font-bold">
-            {risk.debt_to_income_ratio ? (risk.debt_to_income_ratio * 100).toFixed(1) : "N/A"}%
+            {risk.debt_to_income_ratio != null ? (risk.debt_to_income_ratio * 100).toFixed(1) : "N/A"}%
           </p>
         </Card>
         <Card className="p-6">

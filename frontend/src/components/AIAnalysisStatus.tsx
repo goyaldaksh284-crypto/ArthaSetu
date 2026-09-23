@@ -4,55 +4,34 @@ import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Brain, Loader2, CheckCircle, AlertCircle, Play, RefreshCw } from "lucide-react";
 import { useApp } from "@/contexts/AppContext";
-import { apiService } from "@/services/api";
+import { runFullAnalysis, type AgentProgress, type AnalysisSummary } from "@/services/aiAnalysis";
+import { toast } from "sonner";
 
-interface AnalysisStatus {
-  user_id: string;
-  status: "in_progress" | "completed" | "failed";
-  agents_completed: number;
-  total_agents: number;
-  last_updated: string;
-}
+type RunStatus = "ready" | "in_progress" | "completed" | "failed";
 
 export const AIAnalysisStatus = () => {
   const { user, refreshData } = useApp();
-  const [analysisStatus, setAnalysisStatus] = useState<AnalysisStatus | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
+  const [status, setStatus] = useState<RunStatus>("ready");
+  const [progress, setProgress] = useState<AgentProgress>({ completed: 0, total: 9, currentAgent: "" });
+  const [summary, setSummary] = useState<AnalysisSummary | null>(null);
 
   const triggerAnalysis = async () => {
     if (!user?.id) return;
-    
-    setIsLoading(true);
-    try {
-      await apiService.spareBackend.triggerAnalysis(user.id);
-      // Start checking status after triggering
-      checkStatus();
-    } catch (error) {
-      console.error("Failed to trigger analysis:", error);
-    } finally {
-      setIsLoading(false);
-    }
-  };
 
-  const checkStatus = async () => {
-    if (!user?.id) return;
-    
+    setStatus("in_progress");
+    setSummary(null);
+    setProgress({ completed: 0, total: 9, currentAgent: "Gathering your transactions..." });
+
     try {
-      const status = await apiService.spareBackend.getAnalysisStatus(user.id);
-      setAnalysisStatus(status);
-      
-      // If completed, refresh data
-      if (status.status === "completed") {
-        refreshData();
-      }
-      
-      // If in progress, check again after 2 seconds
-      if (status.status === "in_progress") {
-        setTimeout(checkStatus, 2000);
-      }
+      const result = await runFullAnalysis((p) => setProgress(p));
+      setSummary(result);
+      setStatus("completed");
+      toast.success("AI analysis complete! Fresh recommendations are ready.");
+      await refreshData();
     } catch (error) {
-      // No analysis running
-      setAnalysisStatus(null);
+      console.error("AI analysis failed:", error);
+      setStatus("failed");
+      toast.error(error instanceof Error ? error.message : "AI analysis failed");
     }
   };
 
@@ -60,31 +39,28 @@ export const AIAnalysisStatus = () => {
     return null;
   }
 
-  const progress = analysisStatus 
-    ? (analysisStatus.agents_completed / analysisStatus.total_agents) * 100 
-    : 0;
+  const progressPct = status === "in_progress"
+    ? (progress.completed / progress.total) * 100
+    : status === "completed" ? 100 : 0;
 
   const getStatusIcon = () => {
-    if (!analysisStatus) return <Brain className="w-4 h-4" />;
-    
-    switch (analysisStatus.status) {
+    if (!status || status === "ready") return <Brain className="w-4 h-4" />;
+    switch (status) {
       case "in_progress":
         return <Loader2 className="w-4 h-4 animate-spin" />;
       case "completed":
         return <CheckCircle className="w-4 h-4 text-green-500" />;
       case "failed":
         return <AlertCircle className="w-4 h-4 text-red-500" />;
-      default:
-        return <Brain className="w-4 h-4" />;
     }
   };
 
   const getStatusText = () => {
-    if (!analysisStatus) return "AI Analysis Ready";
-    
-    switch (analysisStatus.status) {
+    switch (status) {
       case "in_progress":
-        return `AI Analysis in Progress (${analysisStatus.agents_completed}/${analysisStatus.total_agents} agents)`;
+        return progress.currentAgent
+          ? `Running: ${progress.currentAgent} (${progress.completed}/${progress.total})`
+          : "AI Analysis in Progress";
       case "completed":
         return "AI Analysis Complete";
       case "failed":
@@ -94,12 +70,9 @@ export const AIAnalysisStatus = () => {
     }
   };
 
-  const getStatusColor = () => {
-    if (!analysisStatus) return "secondary";
-    
-    switch (analysisStatus.status) {
+  const getStatusColor = (): "secondary" | "default" | "destructive" => {
+    switch (status) {
       case "in_progress":
-        return "default";
       case "completed":
         return "default";
       case "failed":
@@ -124,18 +97,18 @@ export const AIAnalysisStatus = () => {
           </Badge>
           <button
             onClick={triggerAnalysis}
-            disabled={isLoading || analysisStatus?.status === "in_progress"}
-            className="px-3 py-1 text-sm bg-blue-500 text-white rounded hover:bg-blue-600 disabled:opacity-50 flex items-center gap-2"
+            disabled={status === "in_progress"}
+            className="px-3 py-1 text-sm bg-black text-white rounded hover:bg-neutral-800 disabled:opacity-50 flex items-center gap-2"
           >
-            {isLoading ? (
-              <>
-                <Loader2 className="w-3 h-3 animate-spin" />
-                Starting...
-              </>
-            ) : analysisStatus?.status === "in_progress" ? (
+            {status === "in_progress" ? (
               <>
                 <Loader2 className="w-3 h-3 animate-spin" />
                 Running...
+              </>
+            ) : status === "completed" ? (
+              <>
+                <RefreshCw className="w-3 h-3" />
+                Re-run Analysis
               </>
             ) : (
               <>
@@ -145,20 +118,40 @@ export const AIAnalysisStatus = () => {
             )}
           </button>
         </div>
-        
-        {analysisStatus && analysisStatus.status === "in_progress" && (
+
+        {status === "in_progress" && (
           <div className="space-y-2">
             <div className="flex justify-between text-sm text-muted-foreground">
-              <span>Progress</span>
-              <span>{analysisStatus.agents_completed}/{analysisStatus.total_agents} agents</span>
+              <span>{progress.currentAgent || "Starting..."}</span>
+              <span>{progress.completed}/{progress.total} agents</span>
             </div>
-            <Progress value={progress} className="w-full" />
+            <Progress value={progressPct} className="w-full" />
           </div>
         )}
-        
-        {analysisStatus && analysisStatus.status === "completed" && (
-          <div className="text-sm text-green-600 bg-green-50 p-3 rounded">
-            ✓ Analysis complete! Check your recommendations and insights below.
+
+        {status === "completed" && summary && (
+          <div className="space-y-3">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center">
+              <div className="p-2 bg-muted rounded-lg">
+                <p className="text-lg font-bold">{summary.healthScore}</p>
+                <p className="text-xs text-muted-foreground">Health score</p>
+              </div>
+              <div className="p-2 bg-muted rounded-lg">
+                <p className="text-lg font-bold">{summary.emergencyFundMonths > 99 ? "99+" : summary.emergencyFundMonths.toFixed(1)}mo</p>
+                <p className="text-xs text-muted-foreground">Emergency fund</p>
+              </div>
+              <div className="p-2 bg-muted rounded-lg">
+                <p className="text-lg font-bold">{Math.round(summary.volatilityIndex * 100)}%</p>
+                <p className="text-xs text-muted-foreground">Income swings</p>
+              </div>
+              <div className="p-2 bg-muted rounded-lg">
+                <p className="text-lg font-bold">{summary.dailySavings > 0 ? `₹${summary.dailySavings}` : "—"}</p>
+                <p className="text-xs text-muted-foreground">Save per day</p>
+              </div>
+            </div>
+            <div className="text-sm text-green-600 bg-green-50 p-3 rounded">
+              ✓ Analysis complete! See updated recommendations on the Tips page, new budgets in Budget, and pending actions in Action Plan.
+            </div>
           </div>
         )}
       </CardContent>

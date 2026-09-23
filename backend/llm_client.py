@@ -154,8 +154,22 @@ def create_gemini_model_client(model: Optional[str] = None) -> OpenAICompatibleC
     )
 
 
+def create_openrouter_model_client(model: Optional[str] = None) -> OpenAICompatibleClient:
+    """Create an OpenRouter client using OpenAI or Google models."""
+    api_key = os.getenv("OPENROUTER_API_KEY")
+    if not api_key:
+        raise RuntimeError("OPENROUTER_API_KEY environment variable must be set")
+
+    return OpenAICompatibleClient(
+        provider="OpenRouter",
+        api_key=api_key,
+        base_url="https://openrouter.ai/api/v1",
+        model=model or os.getenv("OPENROUTER_MODEL", "openai/gpt-4o-mini"),
+    )
+
+
 def create_groq_model_client(model: Optional[str] = None) -> OpenAICompatibleClient:
-    """Create a Groq client via its OpenAI-compatible endpoint."""
+    """Create a Groq client via its OpenAI-compatible endpoint (legacy fallback)."""
     api_key = os.getenv("GROQ_API_KEY")
     if not api_key:
         raise RuntimeError("GROQ_API_KEY environment variable must be set")
@@ -164,24 +178,33 @@ def create_groq_model_client(model: Optional[str] = None) -> OpenAICompatibleCli
         provider="Groq",
         api_key=api_key,
         base_url="https://api.groq.com/openai/v1",
-        model=model or os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile"),
+        model=model or os.getenv("GROQ_MODEL", "allam-2-7b"),
     )
 
 
 async def generate_narrative(system_prompt: str, user_prompt: str, max_tokens: int = 400) -> str:
     """
     Ask the LLM for a short narrative/explanation string grounded in
-    already-computed real numbers (passed in user_prompt). Gemini first,
-    Groq fallback on any failure. Returns plain text, never raises -- on
-    total failure returns a generic fallback string so a narrative-only
-    outage never blocks a deterministic agent from writing its real numbers.
+    already-computed real numbers (passed in user_prompt).
+    Strictly uses Google and OpenAI models:
+    1. Google Gemini (gemini-3.6-flash) primary
+    2. OpenRouter OpenAI (openai/gpt-4o-mini) fallback
+    3. OpenRouter Google (google/gemini-2.5-flash) fallback
+    Returns plain text, never raises -- on total failure returns a generic
+    fallback string so a narrative-only outage never blocks a deterministic agent.
     """
     messages = [
         {"role": "system", "content": system_prompt},
         {"role": "user", "content": user_prompt},
     ]
 
-    for factory in (create_gemini_model_client, create_groq_model_client):
+    factories = [
+        lambda: create_gemini_model_client(),
+        lambda: create_openrouter_model_client(os.getenv("OPENROUTER_MODEL", "openai/gpt-4o-mini")),
+        lambda: create_openrouter_model_client(os.getenv("OPENROUTER_GOOGLE_MODEL", "google/gemini-2.5-flash")),
+    ]
+
+    for factory in factories:
         try:
             client = factory()
             result = await client.create(messages, max_tokens=max_tokens)
@@ -189,7 +212,8 @@ async def generate_narrative(system_prompt: str, user_prompt: str, max_tokens: i
             if content:
                 return content.strip()
         except Exception as e:
-            logger.warning(f"[generate_narrative] {factory.__name__} failed: {e}")
+            logger.warning(f"[generate_narrative] Provider failed: {e}")
             continue
 
     return "Analysis based on your recent transaction history."
+

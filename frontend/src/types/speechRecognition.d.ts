@@ -1,11 +1,13 @@
 // Speech Recognition API type declarations
 interface SpeechRecognitionEvent {
+  readonly resultIndex: number;
   results: SpeechRecognitionResultList;
   error?: string;
 }
 
 interface SpeechRecognitionResult {
   readonly length: number;
+  readonly isFinal: boolean;
   item(index: number): SpeechRecognitionAlternative;
   [index: number]: SpeechRecognitionAlternative;
 }
