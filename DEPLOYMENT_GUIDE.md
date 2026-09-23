@@ -132,12 +132,14 @@ The ArthaSetu AI Financial Assistant uses Groq's low-latency LPU infrastructure 
 
 Render's free tier web services spin down to save resources after **15 minutes of inactivity**. When a new request arrives, a **cold start** takes ~30-50 seconds to boot up.
 
-### Recommended Free Workarounds:
+### Recommended Free Workaround (cron-job.org):
 1. **Free Uptime Pinger:**
-   - Sign up for a free account at [cron-job.org](https://cron-job.org/) or [UptimeRobot](https://uptimerobot.com/).
-   - Set up an HTTP GET monitor targeting:
-     `https://arthasetu-api.onrender.com/health`
-   - Schedule it to ping once every **14 minutes**.
+   - Sign up for a free account at [cron-job.org](https://cron-job.org/).
+   - Click **Create Cronjob**:
+     - **Title:** `ArthaSetu Render Keepalive`
+     - **URL:** `https://arthasetu-rvu6.onrender.com/api/cron-ping` (or `/ping`)
+     - **Schedule:** Every **14 minutes** (e.g. `*/14 * * * *`)
+     - **Request Method:** `GET` or `HEAD`
    - This keeps your Render container warm 24/7 without exceeding your 750 free monthly hours.
 2. **Frontend Graceful Handling:**
    - The frontend chatbot has a built-in timeout and graceful offline fallback message if the backend is cold-starting.

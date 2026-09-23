@@ -34,6 +34,9 @@ except ImportError:
 # Load environment variables
 load_dotenv()
 
+# Track server start time for uptime and keepalive monitoring
+SERVER_START_TIME = datetime.now()
+
 # Add backend, agents and repo root to path
 backend_dir = os.path.dirname(os.path.abspath(__file__))
 repo_root = os.path.dirname(backend_dir)
@@ -417,6 +420,8 @@ def root():
         "endpoints": {
             "health": "/health",
             "api_health": "/api/health",
+            "ping": "/ping",
+            "cron_ping": "/api/cron-ping",
             "chat": "/api/chat",
             "parse_image": "/api/parse-image",
             "parse_voice": "/api/parse-voice",
@@ -429,9 +434,34 @@ def root():
 
 
 @app.get("/health")
+@app.head("/health")
 def liveness_check():
     """Render and deployment liveness probe."""
     return {"status": "ok", "service": "ArthaSetu Unified Backend"}
+
+
+@app.get("/ping")
+@app.head("/ping")
+@app.get("/cron")
+@app.head("/cron")
+@app.get("/api/cron-ping")
+@app.head("/api/cron-ping")
+def cron_keepalive_ping():
+    """
+    Dedicated keepalive endpoint designed specifically for cron-job.org,
+    UptimeRobot, or external pingers.
+    Keeps the Render free tier container warm and active, preventing the 15-minute
+    inactivity spin-down.
+    """
+    now = datetime.now()
+    uptime_seconds = int((now - SERVER_START_TIME).total_seconds())
+    return {
+        "status": "alive",
+        "service": "ArthaSetu Keepalive Ping",
+        "message": "Render container is warm and active. Cold start prevented.",
+        "uptime_seconds": uptime_seconds,
+        "timestamp": now.isoformat()
+    }
 
 
 @app.get("/api/health")
