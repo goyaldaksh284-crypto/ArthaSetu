@@ -95,8 +95,8 @@ Under **Environment Variables**, add the following:
 
 | Key | Value | Notes |
 | :--- | :--- | :--- |
-| `VITE_API_BASE_URL` | `https://arthasetu-api.onrender.com` | Replace with your actual Render URL |
-| `VITE_PARSER_API_URL` | `https://arthasetu-api.onrender.com/api` | API subpath for transactions & chat |
+| `VITE_API_BASE_URL` | `https://arthasetu-rvu6.onrender.com` | Live Render Backend URL |
+| `VITE_PARSER_API_URL` | `https://arthasetu-rvu6.onrender.com/api` | API subpath for transactions & chat |
 | `VITE_SUPABASE_URL` | `https://your-project.supabase.co` | Your Supabase project URL |
 | `VITE_SUPABASE_ANON_KEY` | `your-anon-key` | Your Supabase public anonymous key |
 
