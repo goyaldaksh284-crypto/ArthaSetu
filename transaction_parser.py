@@ -218,6 +218,13 @@ class TransactionParser:
         # Inject user context if available
         if user_context:
             ctx_str = f"User Profile Context: Name: {user_context.get('name', 'Gig Worker')}, Primary Platform: {user_context.get('platform', 'Gig Platform')}, City: {user_context.get('city', 'India')}."
+            snapshot = user_context.get("financial_snapshot")
+            if snapshot:
+                ctx_str += (
+                    "\nLive Financial Snapshot (real numbers from the user's app -- use these exact "
+                    "figures when answering money questions, never invent amounts):\n"
+                    + str(snapshot)
+                )
             formatted_messages.append({"role": "system", "content": ctx_str})
 
         # Append conversation history

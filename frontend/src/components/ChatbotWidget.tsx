@@ -15,6 +15,7 @@ import {
   ArrowRight
 } from "lucide-react";
 import { useApp } from "@/contexts/AppContext";
+import { answerLocally, buildFinancialSnapshot } from "@/lib/chatAssistant";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 
@@ -27,11 +28,11 @@ interface ChatMessage {
 }
 
 const DEFAULT_SUGGESTIONS = [
-  "How to save tax under New Regime?",
-  "How do I scan a receipt photo?",
-  "Explain my income volatility",
-  "Emergency fund for gig workers",
-  "Deductions for Swiggy & Zomato riders"
+  "How much did I spend this month?",
+  "Estimate my tax",
+  "How are my goals doing?",
+  "How do I scan a receipt?",
+  "Explain my income volatility"
 ];
 
 const INITIAL_MESSAGE: ChatMessage = {
@@ -104,7 +105,13 @@ export default function ChatbotWidget() {
         console.error("Speech error", event);
         setIsListening(false);
         if (event.error !== "no-speech") {
-          toast.error(`Speech recognition: ${event.error}`);
+          const messages: Record<string, string> = {
+            "not-allowed": "Microphone permission denied. Allow mic access and try again.",
+            "service-not-allowed": "Voice input isn't available in this browser — please type your question.",
+            network: "Voice input needs an internet connection. Please type your question instead.",
+            "audio-capture": "No microphone found. Please connect one and try again.",
+          };
+          toast.error(messages[event.error] || `Voice input error (${event.error}). Please type instead.`);
         }
       };
 
@@ -155,44 +162,45 @@ export default function ChatbotWidget() {
         balance: user?.balance
       };
 
-      // Call Chatbot API
+      // Call Chatbot API (AI server on port 8001). Fails instantly when it
+      // isn't running — then the offline assistant answers from the user's
+      // real app data instead.
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 25000);
+      const financialSnapshot = await buildFinancialSnapshot();
       const response = await fetch(`${parserUrl}/chat`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           messages: [...messages, userMessage].map(m => ({ role: m.role, content: m.content })),
-          user_context: userContext
-        })
+          user_context: { ...userContext, financial_snapshot: financialSnapshot }
+        }),
+        signal: controller.signal
       });
+      clearTimeout(timeoutId);
 
       if (!response.ok) {
         throw new Error(`Server responded with ${response.status}`);
       }
 
       const data = await response.json();
+      const replyText = (data.reply || "").trim();
+      if (!replyText) {
+        throw new Error("Empty reply");
+      }
       const assistantMessage: ChatMessage = {
         id: "a-" + Date.now(),
         role: "assistant",
-        content: data.reply || "I am your ArthaSetu Financial Assistant. How can I help you with your gig finances or navigating the app?",
+        content: replyText,
         timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
       };
 
       setMessages(prev => [...prev, assistantMessage]);
     } catch (error) {
-      console.warn("Backend chat error, using local assistant fallback:", error);
-      // Fallback response with guardrails
-      let fallbackText = "I am your ArthaSetu Financial Assistant, designed exclusively to help you with your transactions, gig earnings, tax calculations, and savings on this platform. How can I assist you with your finances today?";
-      const lower = query.toLowerCase();
-
-      if (lower.includes("tax") || lower.includes("new regime") || lower.includes("87a")) {
-        fallbackText = "Under the FY 2024-25 New Tax Regime, gig workers with taxable income up to ₹7 Lakh pay zero tax thanks to the Section 87A rebate! For income above ₹7 Lakh, the slabs are: 0-3L (Nil), 3-6L (5%), 6-9L (10%), 9-12L (15%). Freelancers can also use Section 44ADA to declare 50% profit without bookkeeping.";
-      } else if (lower.includes("receipt") || lower.includes("photo") || lower.includes("scan") || lower.includes("image")) {
-        fallbackText = "To scan a receipt, head to the Transactions page and click on the 'Image' tab. Upload or snap a photo of your petrol bill, grocery slip, or restaurant invoice. Our AI automatically extracts the amount, date, merchant, and category for you!";
-      } else if (lower.includes("volatility") || lower.includes("income") || lower.includes("lean")) {
-        fallbackText = "Gig worker income fluctuates daily. ArthaSetu computes your 30-day volatility index and highlights lean days (like mid-week slow hours vs weekend surges). We recommend keeping a buffer fund to smooth out lean weeks.";
-      } else if (lower.includes("emergency") || lower.includes("saving") || lower.includes("fund")) {
-        fallbackText = "For gig workers with irregular income, an emergency fund covering 3 to 6 months of basic living expenses is essential. ArthaSetu helps you auto-allocate micro-savings from high-earning days toward your safety cushion.";
-      }
+      console.warn("AI server unavailable, using offline assistant:", error);
+      // Offline assistant: answers from the user's real transactions,
+      // budgets, goals and saved analysis — no server needed.
+      const fallbackText = await answerLocally(query);
 
       const assistantMessage: ChatMessage = {
         id: "a-" + Date.now(),
