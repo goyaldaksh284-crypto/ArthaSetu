@@ -33,6 +33,7 @@ const Profile = () => {
     full_name: "",
     phone_number: "",
     email: "",
+    avatar_url: "",
     date_of_birth: "",
     preferred_language: "en",
     occupation: "",
@@ -75,6 +76,7 @@ const Profile = () => {
         full_name: userData.full_name || "",
         phone_number: userData.phone_number || "",
         email: userData.email || "",
+        avatar_url: userData.avatar_url || "",
         date_of_birth: userData.date_of_birth || "",
         preferred_language: userData.preferred_language || "en",
         occupation: userData.occupation || "",
@@ -107,7 +109,9 @@ const Profile = () => {
       await Promise.all([
         db.users.updateMe({
           full_name: formData.full_name,
+          phone_number: formData.phone_number || undefined,
           email: formData.email || undefined,
+          avatar_url: formData.avatar_url || undefined,
           date_of_birth: formData.date_of_birth || undefined,
           preferred_language: formData.preferred_language,
           occupation: formData.occupation,
@@ -200,6 +204,39 @@ const Profile = () => {
 
       {/* Basic Info */}
       <Card className="p-6">
+        {/* Profile Identity Banner */}
+        <div className="flex items-center gap-4 mb-6 pb-6 border-b border-border">
+          <div className="w-16 h-16 rounded-full overflow-hidden border-2 border-slate-200 shadow-sm bg-gradient-to-br from-primary to-secondary flex items-center justify-center text-white text-2xl font-bold flex-shrink-0">
+            {formData.avatar_url ? (
+              <img
+                src={formData.avatar_url}
+                alt={formData.full_name || "Profile"}
+                className="w-full h-full object-cover"
+                referrerPolicy="no-referrer"
+                onError={(e) => {
+                  (e.target as HTMLElement).style.display = "none";
+                }}
+              />
+            ) : (
+              <span>{formData.full_name?.charAt(0).toUpperCase() || "U"}</span>
+            )}
+          </div>
+          <div className="flex-1 min-w-0">
+            <h4 className="text-xl font-bold text-foreground truncate">{formData.full_name || "User"}</h4>
+            <p className="text-sm text-muted-foreground truncate">{formData.email || formData.phone_number}</p>
+            <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300">
+                Active Profile
+              </span>
+              {formData.avatar_url && (
+                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800 dark:bg-blue-950/60 dark:text-blue-300">
+                  Google Account Connected
+                </span>
+              )}
+            </div>
+          </div>
+        </div>
+
         <h3 className="text-lg font-semibold mb-4">Basic Information</h3>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div className="space-y-2">
@@ -208,15 +245,16 @@ const Profile = () => {
               value={formData.full_name}
               onChange={(e) => setFormData({ ...formData, full_name: e.target.value })}
             />
-            </div>
+          </div>
           <div className="space-y-2">
-            <Label>Phone Number *</Label>
+            <Label>Phone Number</Label>
             <Input
               value={formData.phone_number}
+              placeholder="+91 9876543210"
               onChange={(e) => setFormData({ ...formData, phone_number: e.target.value })}
-              disabled
+              disabled={Boolean(formData.phone_number && !formData.phone_number.startsWith('g_'))}
             />
-            </div>
+          </div>
           <div className="space-y-2">
             <Label>Email</Label>
             <Input

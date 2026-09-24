@@ -15,6 +15,7 @@ export interface User {
   phone_number: string;
   email?: string;
   full_name: string;
+  avatar_url?: string;
   occupation?: string;
   city?: string;
   state?: string;
@@ -25,6 +26,7 @@ export interface User {
   kyc_verified: boolean;
   onboarding_completed: boolean;
   created_at: string;
+  updated_at?: string;
 }
 
 export interface UserProfile {
@@ -995,8 +997,114 @@ export const db = {
 
   // ========== USERS & PROFILES ==========
   users: {
+    syncAuthUser: async (authUser: any): Promise<User> => {
+      if (!authUser) throw new Error("No auth user provided");
+      const userId = authUser.id;
+      const meta = authUser.user_metadata || {};
+
+      const fullName = (
+        meta.full_name ||
+        meta.name ||
+        meta.user_name ||
+        (authUser.email ? authUser.email.split('@')[0] : 'User')
+      ).trim();
+      const email = authUser.email || meta.email || '';
+      const avatarUrl = meta.avatar_url || meta.picture || '';
+      const phone = authUser.phone || meta.phone_number || '';
+
+      const localProfile = getLocal<User | null>(`arthasetu_profile_${userId}`, null);
+      const resolvedName = (localProfile?.full_name && localProfile.full_name !== 'Rahul Sharma')
+        ? localProfile.full_name
+        : fullName;
+      const resolvedEmail = localProfile?.email || email;
+      const resolvedPhone = localProfile?.phone_number || phone;
+      const resolvedAvatar = localProfile?.avatar_url || avatarUrl;
+
+      const profile: User = {
+        user_id: userId,
+        phone_number: resolvedPhone,
+        email: resolvedEmail,
+        full_name: resolvedName,
+        avatar_url: resolvedAvatar,
+        occupation: localProfile?.occupation || 'Delivery Partner',
+        city: localProfile?.city || 'Bengaluru',
+        state: localProfile?.state || 'Karnataka',
+        pin_code: localProfile?.pin_code || '560001',
+        date_of_birth: localProfile?.date_of_birth || '1998-05-12',
+        preferred_language: localProfile?.preferred_language || 'en',
+        is_active: true,
+        kyc_verified: true,
+        onboarding_completed: true,
+        created_at: localProfile?.created_at || new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      };
+
+      setLocal(`arthasetu_profile_${userId}`, profile);
+      localStorage.setItem('user_id', userId);
+
+      // Register or update in arthasetu_users
+      const users = getLocal<any[]>('arthasetu_users', []);
+      const idx = users.findIndex(u => u.user_id === userId || (resolvedEmail && u.email === resolvedEmail));
+      if (idx >= 0) {
+        users[idx] = { ...users[idx], ...profile };
+      } else {
+        users.push(profile);
+      }
+      setLocal('arthasetu_users', users);
+
+      // Seed starter transactions if user has none
+      const existingTxs = getLocal<any[]>(`arthasetu_txs_${userId}`, []);
+      if (!existingTxs || existingTxs.length === 0) {
+        const seededTxs = DEFAULT_TRANSACTIONS.map(t => ({
+          ...t,
+          transaction_id: `tx-g-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
+          user_id: userId
+        }));
+        setLocal(`arthasetu_txs_${userId}`, seededTxs);
+        setLocal(`arthasetu_budgets_${userId}`, DEFAULT_BUDGETS.map(b => ({ ...b, user_id: userId })));
+        setLocal(`arthasetu_goals_${userId}`, DEFAULT_SAVINGS_GOALS.map(g => ({ ...g, user_id: userId })));
+        setLocal(`arthasetu_bills_${userId}`, DEFAULT_BILLS.map(b => ({ ...b, user_id: userId })));
+        setLocal(`arthasetu_recs_${userId}`, DEFAULT_RECOMMENDATIONS.map(r => ({ ...r, user_id: userId })));
+        setLocal(`arthasetu_actions_${userId}`, DEFAULT_ACTIONS.map(a => ({ ...a, user_id: userId })));
+      }
+
+      // Upsert into Supabase profiles table if live
+      if (isSupabaseLive()) {
+        try {
+          const { data: supaProfile } = await supabase
+            .from('profiles')
+            .select('*')
+            .eq('user_id', userId)
+            .single();
+
+          const dbPayload: any = {
+            user_id: userId,
+            full_name: (supaProfile?.full_name && supaProfile.full_name.trim().length > 0) ? supaProfile.full_name : resolvedName,
+            email: resolvedEmail,
+            phone_number: resolvedPhone || supaProfile?.phone_number || `g_${userId.substring(0, 8)}`,
+            preferred_language: supaProfile?.preferred_language || 'en',
+            updated_at: new Date().toISOString()
+          };
+
+          if (!supaProfile) {
+            dbPayload.occupation = profile.occupation;
+            dbPayload.city = profile.city;
+            dbPayload.state = profile.state;
+            dbPayload.created_at = profile.created_at;
+          }
+
+          await supabase.from('profiles').upsert(dbPayload, { onConflict: 'user_id' });
+        } catch (e) {
+          console.warn('[ArthaSetu] syncAuthUser Supabase profile upsert warning:', e);
+        }
+      }
+
+      return profile;
+    },
+
     getMe: async (): Promise<User> => {
       const userId = getUserId();
+      let liveProfile: User | null = null;
       if (isSupabaseLive()) {
         try {
           const { data, error } = await supabase
@@ -1004,27 +1112,66 @@ export const db = {
             .select('*')
             .eq('user_id', userId)
             .single();
-          if (!error && data) return data as User;
+          if (!error && data) {
+            liveProfile = data as User;
+          }
         } catch (e) {}
       }
-      return getLocal<User>(`arthasetu_profile_${userId}`, {
-        ...DEMO_PROFILE,
-        user_id: userId
-      });
+
+      const localProfile = getLocal<User | null>(`arthasetu_profile_${userId}`, null);
+
+      if (liveProfile && localProfile) {
+        return {
+          ...localProfile,
+          ...liveProfile,
+          avatar_url: localProfile.avatar_url || liveProfile.avatar_url,
+          full_name: liveProfile.full_name || localProfile.full_name
+        };
+      }
+
+      if (liveProfile) return liveProfile;
+      if (localProfile) return localProfile;
+
+      if (userId === 'usr-demo-101') {
+        return { ...DEMO_PROFILE, user_id: userId };
+      }
+
+      return {
+        user_id: userId,
+        phone_number: '',
+        email: '',
+        full_name: 'User',
+        preferred_language: 'en',
+        is_active: true,
+        kyc_verified: true,
+        onboarding_completed: true,
+        created_at: new Date().toISOString(),
+      };
     },
 
     updateMe: async (data: Partial<User>): Promise<User> => {
       const userId = getUserId();
-      const current = getLocal<User>(`arthasetu_profile_${userId}`, {
-        ...DEMO_PROFILE,
-        user_id: userId
-      });
+      const current = await db.users.getMe();
       const updated = { ...current, ...data, updated_at: new Date().toISOString() };
       setLocal(`arthasetu_profile_${userId}`, updated);
 
+      // Also update in arthasetu_users list
+      const users = getLocal<any[]>('arthasetu_users', []);
+      const idx = users.findIndex(u => u.user_id === userId);
+      if (idx >= 0) {
+        users[idx] = { ...users[idx], ...updated };
+        setLocal('arthasetu_users', users);
+      }
+
       if (isSupabaseLive()) {
         try {
-          await supabase.from('profiles').update(data).eq('user_id', userId);
+          const { avatar_url, ...dbData } = data as any;
+          if (Object.keys(dbData).length > 0) {
+            await supabase.from('profiles').update(dbData).eq('user_id', userId);
+          }
+          if (avatar_url) {
+            await supabase.auth.updateUser({ data: { avatar_url } }).catch(() => {});
+          }
         } catch (e) {}
       }
       return updated;

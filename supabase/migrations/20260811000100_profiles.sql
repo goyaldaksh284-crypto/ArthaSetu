@@ -8,9 +8,10 @@
 
 create table if not exists profiles (
     user_id uuid primary key references auth.users(id) on delete cascade,
-    phone_number varchar(15) not null unique,
-    full_name varchar(255) not null,
+    phone_number varchar(30) default '',
+    full_name varchar(255) not null default '',
     email varchar(255) default '',
+    avatar_url text default '',
     occupation varchar(100) default '',
     city varchar(100) default '',
     state varchar(100) default '',
@@ -27,8 +28,7 @@ create table if not exists profiles (
 create index if not exists idx_profiles_phone on profiles(phone_number);
 
 -- Populates `profiles` automatically whenever Supabase Auth creates a new
--- auth.users row (i.e. right after supabase.auth.signUp()). Fields come from
--- the `options.data` metadata passed at signup time.
+-- auth.users row (either via Email/Phone signup or Google OAuth).
 create or replace function handle_new_user()
 returns trigger
 language plpgsql
@@ -41,16 +41,26 @@ begin
     )
     values (
         new.id,
-        coalesce(new.raw_user_meta_data->>'phone_number', ''),
-        coalesce(new.raw_user_meta_data->>'full_name', ''),
-        coalesce(new.raw_user_meta_data->>'email', ''),
-        coalesce(new.raw_user_meta_data->>'occupation', ''),
-        coalesce(new.raw_user_meta_data->>'city', ''),
-        coalesce(new.raw_user_meta_data->>'state', ''),
+        coalesce(new.raw_user_meta_data->>'phone_number', new.phone, ''),
+        coalesce(
+            new.raw_user_meta_data->>'full_name',
+            new.raw_user_meta_data->>'name',
+            new.raw_user_meta_data->>'user_name',
+            split_part(coalesce(new.email, ''), '@', 1),
+            'User'
+        ),
+        coalesce(new.email, new.raw_user_meta_data->>'email', ''),
+        coalesce(new.raw_user_meta_data->>'occupation', 'Delivery Partner'),
+        coalesce(new.raw_user_meta_data->>'city', 'Bengaluru'),
+        coalesce(new.raw_user_meta_data->>'state', 'Karnataka'),
         coalesce(new.raw_user_meta_data->>'pin_code', ''),
         nullif(new.raw_user_meta_data->>'date_of_birth', '')::date,
         coalesce(new.raw_user_meta_data->>'preferred_language', 'en')
-    );
+    )
+    on conflict (user_id) do update set
+        full_name = excluded.full_name,
+        email = excluded.email,
+        updated_at = now();
     return new;
 end;
 $$;

@@ -72,9 +72,21 @@ const TopBar = () => {
           {user && (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <button className="flex items-center gap-2.5 h-auto px-2 py-1.5 rounded-[4px] hover:bg-muted/60 transition-colors">
-                  <div className="w-7 h-7 rounded-[4px] bg-gradient-to-br from-primary to-secondary flex items-center justify-center text-white font-semibold text-[12px]">
-                    {user.name?.charAt(0).toUpperCase() || "U"}
+                <button className="flex items-center gap-2.5 h-auto px-2 py-1.5 rounded-full hover:bg-muted/60 transition-colors">
+                  <div className="w-8 h-8 rounded-full overflow-hidden bg-gradient-to-br from-primary to-secondary flex items-center justify-center text-white font-semibold text-[13px] border border-slate-200/80 shadow-sm flex-shrink-0">
+                    {user.avatar_url ? (
+                      <img
+                        src={user.avatar_url}
+                        alt={user.name || "User"}
+                        className="w-full h-full object-cover"
+                        referrerPolicy="no-referrer"
+                        onError={(e) => {
+                          (e.target as HTMLElement).style.display = "none";
+                        }}
+                      />
+                    ) : (
+                      <span>{user.name?.charAt(0).toUpperCase() || "U"}</span>
+                    )}
                   </div>
                   <span className="hidden md:block text-[13px] font-medium text-foreground">{user.name || "User"}</span>
                 </button>

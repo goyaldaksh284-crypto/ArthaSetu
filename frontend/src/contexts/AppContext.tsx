@@ -7,6 +7,7 @@ import { supabase } from "@/lib/supabase";
 
 export interface User extends ApiUser {
   balance: number;
+  avatar_url?: string;
 }
 
 export interface Transaction {
@@ -175,9 +176,10 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
 
       setUser({
         id: userData.user_id,
-        email: userData.email || `${userData.phone_number}@users.arthasetu.app`,
-        name: userData.full_name || "Rahul Sharma",
-        phone: userData.phone_number,
+        email: userData.email || (userData.phone_number ? `${userData.phone_number}@users.arthasetu.app` : 'user@arthasetu.app'),
+        name: userData.full_name || (userData.user_id === 'usr-demo-101' ? 'Rahul Sharma' : 'User'),
+        phone: userData.phone_number || '',
+        avatar_url: userData.avatar_url || '',
         occupation: userData.occupation || "Delivery Partner",
         created_at: userData.created_at,
         updated_at: userData.created_at,
@@ -222,11 +224,15 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     localStorage.setItem('user_id', existingUserId);
     setIsAuthenticated(true);
 
-    const syncSession = async (userId: string | undefined) => {
-      const activeId = userId || localStorage.getItem('user_id') || 'usr-demo-101';
-      localStorage.setItem('user_id', activeId);
-      setIsAuthenticated(true);
+    const syncSession = async (session: any) => {
       try {
+        if (session?.user) {
+          await db.users.syncAuthUser(session.user);
+        } else {
+          const activeId = localStorage.getItem('user_id') || 'usr-demo-101';
+          localStorage.setItem('user_id', activeId);
+        }
+        setIsAuthenticated(true);
         await loadUserData();
       } catch (error) {
         console.warn('[ArthaSetu AppContext] Sync session active:', error);
@@ -237,18 +243,18 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
 
     try {
       supabase.auth.getSession().then(({ data: { session } }) => {
-        syncSession(session?.user?.id);
+        syncSession(session);
       }).catch(() => {
-        syncSession(existingUserId);
+        syncSession(null);
       });
 
       const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
-        syncSession(session?.user?.id);
+        syncSession(session);
       });
 
-      return () => listener.subscription.unsubscribe();
+      return () => listener?.subscription?.unsubscribe();
     } catch (e) {
-      syncSession(existingUserId);
+      syncSession(null);
     }
   }, [loadUserData]);
 
@@ -364,7 +370,9 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
         return;
       }
       setIsAuthenticated(true);
-      if (res?.user_id) {
+      if (res?.user) {
+        await db.users.syncAuthUser(res.user);
+      } else if (res?.user_id) {
         localStorage.setItem('user_id', res.user_id);
       }
       await loadUserData();
