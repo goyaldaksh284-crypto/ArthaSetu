@@ -14,7 +14,7 @@ import { Loader2, Home, FileText, Info, AlertCircle, RefreshCw, Calculator, Tren
 import db from "@/services/database";
 import { toast } from "sonner";
 import PageIntro from "@/components/PageIntro";
-import { hasMinimumTransactions } from "@/lib/dataRequirements";
+import { hasMinimumTransactions, hasMinimumTransactionsSync } from "@/lib/dataRequirements";
 import MinimumDataRequired from "@/components/MinimumDataRequired";
 
 // Tax calculation helper for New Regime FY 2024-25
@@ -46,8 +46,8 @@ const Tax = () => {
   // one existed for the actual current FY.
   const [selectedYear, setSelectedYear] = useState<string>("");
   const [currentRecord, setCurrentRecord] = useState<any | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [hasMinimumData, setHasMinimumData] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const [hasMinimumData, setHasMinimumData] = useState(() => hasMinimumTransactionsSync());
   const [error, setError] = useState<string | null>(null);
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
   const [isManualFormOpen, setIsManualFormOpen] = useState(false);
@@ -100,9 +100,9 @@ const Tax = () => {
     try {
       const hasMinData = await hasMinimumTransactions();
       setHasMinimumData(hasMinData);
-      setIsLoading(false);
     } catch (error) {
-      console.error("Error checking data requirements:", error);
+      console.warn("Error checking data requirements:", error);
+    } finally {
       setIsLoading(false);
     }
   };
@@ -257,7 +257,7 @@ const Tax = () => {
   };
 
   // Loading State
-  if (isLoading) {
+  if (isLoading && taxRecords.length === 0 && !currentRecord) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
         <div className="flex flex-col items-center gap-4">

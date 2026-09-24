@@ -46,8 +46,8 @@ const MAX_PDF_BYTES = 100 * 1024 * 1024; // 100 MB hard cap
 const CATEGORY_MAPPINGS: Array<{ pattern: RegExp; category: string; type: 'income' | 'expense' }> = [
   // Income patterns
   { pattern: /salary|payroll|wage/i, category: 'Salary', type: 'income' },
-  { pattern: /neft[\s\/-]*cr|nach[\s\/-]*cr|imps[\s\/-]*cr/i, category: 'Bank Transfer', type: 'income' },
-  { pattern: /upi[\s\/-]*cr|\/cr\/|by cr/i, category: 'UPI Payment', type: 'income' },
+  { pattern: /neft[\s/-]*cr|nach[\s/-]*cr|imps[\s/-]*cr/i, category: 'Bank Transfer', type: 'income' },
+  { pattern: /upi[\s/-]*cr|\/cr\/|by cr/i, category: 'UPI Payment', type: 'income' },
   { pattern: /interest/i, category: 'Interest', type: 'income' },
   { pattern: /dividend/i, category: 'Investment', type: 'income' },
   { pattern: /refund|reversal/i, category: 'Refund', type: 'income' },
@@ -58,7 +58,7 @@ const CATEGORY_MAPPINGS: Array<{ pattern: RegExp; category: string; type: 'incom
   // Expense patterns
   { pattern: /atm|cash wdl|withdrawal/i, category: 'ATM Withdrawal', type: 'expense' },
   { pattern: /\bpos\b|purchase/i, category: 'Shopping', type: 'expense' },
-  { pattern: /neft[\s\/-]*dr|nach[\s\/-]*dr|imps[\s\/-]*dr/i, category: 'Bank Transfer', type: 'expense' },
+  { pattern: /neft[\s/-]*dr|nach[\s/-]*dr|imps[\s/-]*dr/i, category: 'Bank Transfer', type: 'expense' },
   { pattern: /upi/i, category: 'UPI Payment', type: 'expense' },
   { pattern: /\bemi\b/i, category: 'EMI', type: 'expense' },
   { pattern: /loan/i, category: 'Loan', type: 'expense' },
@@ -81,7 +81,7 @@ const CATEGORY_MAPPINGS: Array<{ pattern: RegExp; category: string; type: 'incom
 ];
 
 const INCOME_KEYWORDS =
-  /\b(cr|credit|credited|deposit|salary|interest|refund|cashback|reversal|received)\b|[\/\-]cr\b/i;
+  /\b(cr|credit|credited|deposit|salary|interest|refund|cashback|reversal|received)\b|[/-]cr\b/i;
 
 const MERCHANTS = [
   'swiggy', 'zomato', 'amazon', 'flipkart', 'uber', 'ola', 'rapido',
@@ -128,12 +128,12 @@ const MONTH_MAP: Record<string, string> = {
 
 // Ordered so unambiguous matches win; month names are validated via MONTH_MAP
 const DATE_PATTERNS: Array<{ re: RegExp; kind: 'dmy4' | 'dmy2' | 'dmony4' | 'iso' | 'dmdot' | 'dmonyy2' }> = [
-  { re: /\b(\d{1,2})[\/\-\s.](Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec)[a-z]*[\/\-\s.](\d{4})\b/gi, kind: 'dmony4' }, // 15 Jan 2024 / 15-Jan-2024
-  { re: /\b(\d{1,2})[\/\-\s.]'?(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*[\/\-\s.']?(\d{2})\b/gi, kind: 'dmonyy2' }, // 15 Jan'24 / 15-Jan-24
-  { re: /\b(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})\b/g, kind: 'iso' }, // 2024-01-15
-  { re: /\b(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})\b/g, kind: 'dmy4' }, // 15/01/2024
+  { re: /\b(\d{1,2})[/\s.-](Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec)[a-z]*[/\s.-](\d{4})\b/gi, kind: 'dmony4' }, // 15 Jan 2024 / 15-Jan-2024
+  { re: /\b(\d{1,2})[/\s.-]'?(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*[/\s.'-]?(\d{2})\b/gi, kind: 'dmonyy2' }, // 15 Jan'24 / 15-Jan-24
+  { re: /\b(\d{4})[/-](\d{1,2})[/-](\d{1,2})\b/g, kind: 'iso' }, // 2024-01-15
+  { re: /\b(\d{1,2})[/-](\d{1,2})[/-](\d{4})\b/g, kind: 'dmy4' }, // 15/01/2024
   { re: /\b(\d{1,2})\.(\d{1,2})\.(\d{4})\b/g, kind: 'dmdot' }, // 15.01.2024
-  { re: /\b(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2})\b/g, kind: 'dmy2' }, // 15/01/24
+  { re: /\b(\d{1,2})[/-](\d{1,2})[/-](\d{2})\b/g, kind: 'dmy2' }, // 15/01/24
 ];
 
 function normalizeDate(day: string, month: string, year: string): string | null {
@@ -155,7 +155,8 @@ function normalizeDateWithMonth(day: string, mon: string, year: string): string 
 export function parseDate(dateStr: string): string | null {
   if (!dateStr) return null;
   for (const { re, kind } of DATE_PATTERNS) {
-    const m = dateStr.match(re);
+    re.lastIndex = 0;
+    const m = re.exec(dateStr); // exec (not String.match) so capture groups are kept
     if (!m) continue;
     switch (kind) {
       case 'dmony4':
@@ -332,29 +333,43 @@ export async function extractTextFromPDF(
   pdfjsLib.GlobalWorkerOptions.workerSrc = workerUrl;
 
   const data = new Uint8Array(await file.arrayBuffer());
-  const pdf = await pdfjsLib.getDocument({
-    data,
-    isEvalSupported: false,
-    useSystemFonts: true,
-  }).promise;
+  let pdf;
+  try {
+    pdf = await pdfjsLib.getDocument({
+      data,
+      isEvalSupported: false,
+      useSystemFonts: true,
+    }).promise;
+  } catch (err) {
+    // Most Indian bank e-statements ship password-protected (HDFC, ICICI...)
+    if (err instanceof Error && err.name === 'PasswordException') {
+      throw new Error(
+        'This PDF is password-protected. Open it in a PDF viewer with your password, then use "Print → Save as PDF" to create an unlocked copy and upload that.'
+      );
+    }
+    throw err;
+  }
 
   const pageTexts: string[] = [];
-  for (let i = 1; i <= pdf.numPages; i++) {
-    onProgress?.({ pagesDone: i - 1, totalPages: pdf.numPages });
+  const numPages = pdf.numPages;
+  for (let i = 1; i <= numPages; i++) {
+    onProgress?.({ pagesDone: i - 1, totalPages: numPages });
     const page = await pdf.getPage(i);
     const textContent = await page.getTextContent();
-    pageTexts.push(textItemsToLines(textContent.items as any));
+    pageTexts.push(textItemsToLines(textContent.items as unknown as Array<{ str: string; transform?: number[]; hasEOL?: boolean }>));
     page.cleanup();
     // Yield to the event loop so the spinner/progress paints between pages
     if (i % 5 === 0) await new Promise((r) => setTimeout(r, 0));
   }
-  onProgress?.({ pagesDone: pdf.numPages, totalPages: pdf.numPages });
+  onProgress?.({ pagesDone: numPages, totalPages: numPages });
 
   await pdf.destroy();
 
-  const fullText = pageTexts.join('\n');
+  // Join with a form-feed line so parseGenericStatement can detect page
+  // boundaries (page headers must not be treated as narration continuations).
+  const fullText = pageTexts.join('\n\f\n');
   // Scanned/image-only PDFs produce almost no text
-  if (fullText.replace(/\s/g, '').length < 20 * pdf.numPages) {
+  if (fullText.replace(/\s/g, '').length < 20 * numPages) {
     throw new Error(
       'This PDF appears to be a scanned statement (no extractable text). Please upload the digital/original PDF from your bank, not a photocopy or scan.'
     );
@@ -445,7 +460,7 @@ function parseGenericStatement(text: string): ParsedTransaction[] {
     // Clean up description: strip trailing value-date, ref numbers, separators
     let description = row.description
       .replace(/\s+/g, ' ')
-      .replace(/[\s\-\/#*.,]+$/g, '')
+      .replace(/[\s/#*.,-]+$/g, '')
       .trim();
     if (!description) description = 'Transaction';
 
@@ -472,7 +487,9 @@ function parseGenericStatement(text: string): ParsedTransaction[] {
   let lastWasTransaction = false;
   for (const rawLine of lines) {
     const line = rawLine.trim();
-    if (!line) {
+    // '\f' marks a page boundary: a new page's header must never be appended
+    // to the previous page's last transaction as a "continuation".
+    if (!line || line === '\f') {
       lastWasTransaction = false;
       continue;
     }
@@ -550,7 +567,7 @@ export async function parseBankStatement(pdfText: string): Promise<ParseResult> 
     const accountNumber = accountMatch ? accountMatch[1] : undefined;
 
     const periodMatch = pdfText.match(
-      /(\d{1,2}[\/\-.]\d{1,2}[\/\-.]\d{2,4}|\d{1,2}[\s\-.]?(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*[\s\-.]?\d{2,4})\s*(?:to|[-–—])\s*(\d{1,2}[\/\-.]\d{1,2}[\/\-.]\d{2,4}|\d{1,2}[\s\-.]?(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*[\s\-.]?\d{2,4})/i
+      /(\d{1,2}[/.-]\d{1,2}[/.-]\d{2,4}|\d{1,2}[\s\-.]?(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*[\s\-.]?\d{2,4})\s*(?:to|[-–—])\s*(\d{1,2}[/.-]\d{1,2}[/.-]\d{2,4}|\d{1,2}[\s\-.]?(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*[\s\-.]?\d{2,4})/i
     );
     const statementPeriod = periodMatch
       ? {

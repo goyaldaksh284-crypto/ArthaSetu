@@ -10,14 +10,14 @@ import db from "@/services/database";
 import { toast } from "sonner";
 import PageIntro from "@/components/PageIntro";
 import HelpTooltip from "@/components/HelpTooltip";
-import { hasMinimumTransactions } from "@/lib/dataRequirements";
+import { hasMinimumTransactions, hasMinimumTransactionsSync } from "@/lib/dataRequirements";
 import MinimumDataRequired from "@/components/MinimumDataRequired";
 
 const RiskDashboard = () => {
   const navigate = useNavigate();
   const [risk, setRisk] = useState<any | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [hasMinimumData, setHasMinimumData] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const [hasMinimumData, setHasMinimumData] = useState(() => hasMinimumTransactionsSync());
   const [loadError, setLoadError] = useState(false);
 
   useEffect(() => {
@@ -34,9 +34,9 @@ const RiskDashboard = () => {
     try {
       const hasMinData = await hasMinimumTransactions();
       setHasMinimumData(hasMinData);
-      setIsLoading(false);
     } catch (error) {
-      console.error("Error checking data requirements:", error);
+      console.warn("Error checking data requirements:", error);
+    } finally {
       setIsLoading(false);
     }
   };
@@ -85,7 +85,7 @@ const RiskDashboard = () => {
     }
   };
 
-  if (isLoading) {
+  if (isLoading && !risk) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
         <div className="flex flex-col items-center gap-4">

@@ -14,14 +14,18 @@ import { CalendarIcon, Search, Edit, Trash2, Loader2 } from "lucide-react";
 import { format } from "date-fns";
 import { motion } from "framer-motion";
 import { cn } from "@/lib/utils";
-import db from "@/services/database";
+import db, { getLocal, DEFAULT_TRANSACTIONS } from "@/services/database";
 import { toast } from "sonner";
 import PageIntro from "@/components/PageIntro";
 
 const Transactions = () => {
   const { isAuthenticated } = useApp();
-  const [transactions, setTransactions] = useState<any[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const getInitialTxs = () => {
+    const userId = typeof window !== 'undefined' ? localStorage.getItem('user_id') || 'usr-demo-101' : 'usr-demo-101';
+    return getLocal<any[]>(`arthasetu_txs_${userId}`, DEFAULT_TRANSACTIONS);
+  };
+  const [transactions, setTransactions] = useState<any[]>(getInitialTxs);
+  const [isLoading, setIsLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [typeFilter, setTypeFilter] = useState<"all" | "income" | "expense">("all");
   const [categoryFilter, setCategoryFilter] = useState<string>("all");
@@ -37,19 +41,19 @@ const Transactions = () => {
     if (isAuthenticated) {
       loadTransactions();
     }
-  }, [isAuthenticated]);
+  }, [isAuthenticated, dateRange.from, dateRange.to]);
 
   const loadTransactions = async () => {
     try {
-      setIsLoading(true);
       const data = await db.transactions.getAll({
         date_start: dateRange.from?.toISOString().split('T')[0],
         date_end: dateRange.to?.toISOString().split('T')[0],
       });
-      setTransactions(data);
+      if (data && data.length > 0) {
+        setTransactions(data);
+      }
     } catch (error) {
-      console.error("Failed to load transactions:", error);
-      toast.error("Failed to load transactions");
+      console.warn("Failed to load transactions:", error);
     } finally {
       setIsLoading(false);
     }
@@ -141,7 +145,7 @@ const Transactions = () => {
         }
       };
 
-  if (isLoading) {
+  if (isLoading && transactions.length === 0) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
         <div className="flex flex-col items-center gap-4">

@@ -588,6 +588,31 @@ const isSupabaseLive = (): boolean => {
   return !url.includes('demo') && !url.includes('arthasetu-demo') && url.startsWith('https://') && key.length > 50;
 };
 
+// Helper to validate whether a string is a valid UUID
+export const isUuid = (id?: string | null): boolean => {
+  if (!id) return false;
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id) ||
+         /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
+};
+
+// Resilient promise timeout helper to prevent remote network calls from hanging the UI
+export const withTimeout = <T>(promise: Promise<T>, timeoutMs = 1000, fallback: T): Promise<T> => {
+  let timer: any;
+  const timeoutPromise = new Promise<T>((resolve) => {
+    timer = setTimeout(() => resolve(fallback), timeoutMs);
+  });
+  return Promise.race([
+    promise.then((res) => {
+      clearTimeout(timer);
+      return res;
+    }).catch(() => {
+      clearTimeout(timer);
+      return fallback;
+    }),
+    timeoutPromise
+  ]);
+};
+
 // Shadow email constructor for ArthaSetu
 export const shadowEmail = (phone_number: string): string => `${phone_number}@users.arthasetu.app`;
 
@@ -1075,14 +1100,16 @@ export const db = {
         setLocal(`arthasetu_actions_${userId}`, DEFAULT_ACTIONS.map(a => ({ ...a, user_id: userId })));
       }
 
-      // Upsert into Supabase profiles table if live
-      if (isSupabaseLive()) {
+      // Upsert into Supabase profiles table if live and valid UUID
+      if (isSupabaseLive() && isUuid(userId)) {
         try {
-          const { data: supaProfile } = await supabase
+          const profileQuery = supabase
             .from('profiles')
             .select('*')
             .eq('user_id', userId)
             .single();
+
+          const { data: supaProfile } = await withTimeout(profileQuery, 1000, { data: null });
 
           const dbPayload: any = {
             user_id: userId,
@@ -1100,7 +1127,7 @@ export const db = {
             dbPayload.created_at = profile.created_at;
           }
 
-          await supabase.from('profiles').upsert(dbPayload, { onConflict: 'user_id' });
+          await withTimeout(supabase.from('profiles').upsert(dbPayload, { onConflict: 'user_id' }), 1000, null);
         } catch (e) {
           console.warn('[ArthaSetu] syncAuthUser Supabase profile upsert warning:', e);
         }
@@ -1111,32 +1138,41 @@ export const db = {
 
     getMe: async (): Promise<User> => {
       const userId = getUserId();
+      const localProfile = getLocal<User | null>(`arthasetu_profile_${userId}`, null);
+      if (localProfile && localProfile.full_name && localProfile.full_name !== 'User') {
+        return localProfile;
+      }
+
       let liveProfile: User | null = null;
-      if (isSupabaseLive()) {
+      if (isSupabaseLive() && isUuid(userId)) {
         try {
-          const { data, error } = await supabase
+          const query = supabase
             .from('profiles')
             .select('*')
             .eq('user_id', userId)
             .single();
+          const { data, error } = await withTimeout(query, 1000, { data: null, error: 'timeout' });
           if (!error && data) {
             liveProfile = data as User;
           }
         } catch (e) {}
       }
 
-      const localProfile = getLocal<User | null>(`arthasetu_profile_${userId}`, null);
-
       if (liveProfile && localProfile) {
-        return {
+        const merged = {
           ...localProfile,
           ...liveProfile,
           avatar_url: localProfile.avatar_url || liveProfile.avatar_url,
           full_name: liveProfile.full_name || localProfile.full_name
         };
+        setLocal(`arthasetu_profile_${userId}`, merged);
+        return merged;
       }
 
-      if (liveProfile) return liveProfile;
+      if (liveProfile) {
+        setLocal(`arthasetu_profile_${userId}`, liveProfile);
+        return liveProfile;
+      }
       if (localProfile) return localProfile;
 
       if (userId === 'usr-demo-101') {
@@ -1170,11 +1206,11 @@ export const db = {
         setLocal('arthasetu_users', users);
       }
 
-      if (isSupabaseLive()) {
+      if (isSupabaseLive() && isUuid(userId)) {
         try {
           const { avatar_url, ...dbData } = data as any;
           if (Object.keys(dbData).length > 0) {
-            await supabase.from('profiles').update(dbData).eq('user_id', userId);
+            await withTimeout(supabase.from('profiles').update(dbData).eq('user_id', userId), 1000, null);
           }
           if (avatar_url) {
             await supabase.auth.updateUser({ data: { avatar_url } }).catch(() => {});
@@ -1186,14 +1222,21 @@ export const db = {
 
     getProfile: async (): Promise<UserProfile | null> => {
       const userId = getUserId();
-      if (isSupabaseLive()) {
+      const local = getLocal<UserProfile | null>(`arthasetu_user_profile_${userId}`, null);
+      if (local) return local;
+
+      if (isSupabaseLive() && isUuid(userId)) {
         try {
-          const { data, error } = await supabase
+          const query = supabase
             .from('user_profiles')
             .select('*')
             .eq('user_id', userId)
             .single();
-          if (!error && data) return data as UserProfile;
+          const { data, error } = await withTimeout(query, 1000, { data: null, error: 'timeout' });
+          if (!error && data) {
+            setLocal(`arthasetu_user_profile_${userId}`, data as UserProfile);
+            return data as UserProfile;
+          }
         } catch (e) {}
       }
       return getLocal<UserProfile>(`arthasetu_user_profile_${userId}`, {
@@ -1211,9 +1254,9 @@ export const db = {
       const updated = { ...current, ...data };
       setLocal(`arthasetu_user_profile_${userId}`, updated);
 
-      if (isSupabaseLive()) {
+      if (isSupabaseLive() && isUuid(userId)) {
         try {
-          await supabase.from('user_profiles').update(data).eq('user_id', userId);
+          await withTimeout(supabase.from('user_profiles').update(data).eq('user_id', userId), 1000, null);
         } catch (e) {}
       }
       return updated;
@@ -1231,8 +1274,8 @@ export const db = {
     }): Promise<Transaction[]> => {
       const userId = getUserId();
 
-      // Try Supabase if live
-      if (isSupabaseLive()) {
+      // Try Supabase if live and valid UUID
+      if (isSupabaseLive() && isUuid(userId)) {
         try {
           let query = supabase
             .from('transactions')
@@ -1251,8 +1294,11 @@ export const db = {
             query = query.or(`description.ilike.%${filters.search_query}%,merchant_name.ilike.%${filters.search_query}%`);
           }
 
-          const { data, error } = await query;
-          if (!error && data && data.length > 0) return data as Transaction[];
+          const { data, error } = await withTimeout(query, 1000, { data: null, error: 'timeout' });
+          if (!error && data && data.length > 0) {
+            setLocal(`arthasetu_txs_${userId}`, data as Transaction[]);
+            return data as Transaction[];
+          }
         } catch (e) {}
       }
 

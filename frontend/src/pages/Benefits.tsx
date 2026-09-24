@@ -16,15 +16,15 @@ import { toast } from "sonner";
 import { format } from "date-fns";
 import PageIntro from "@/components/PageIntro";
 import HelpTooltip from "@/components/HelpTooltip";
-import { hasMinimumTransactions } from "@/lib/dataRequirements";
+import { hasMinimumTransactions, hasMinimumTransactionsSync } from "@/lib/dataRequirements";
 import MinimumDataRequired from "@/components/MinimumDataRequired";
 
 const Benefits = () => {
   const navigate = useNavigate();
   const [schemes, setSchemes] = useState<any[]>([]);
   const [applications, setApplications] = useState<any[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [hasMinimumData, setHasMinimumData] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const [hasMinimumData, setHasMinimumData] = useState(() => hasMinimumTransactionsSync());
   const [selectedScheme, setSelectedScheme] = useState<any | null>(null);
   const [isDetailOpen, setIsDetailOpen] = useState(false);
   const [isApplyOpen, setIsApplyOpen] = useState(false);
@@ -53,9 +53,9 @@ const Benefits = () => {
     try {
       const hasMinData = await hasMinimumTransactions();
       setHasMinimumData(hasMinData);
-      setIsLoading(false);
     } catch (error) {
-      console.error("Error checking data requirements:", error);
+      console.warn("Error checking data requirements:", error);
+    } finally {
       setIsLoading(false);
     }
   };
@@ -166,7 +166,7 @@ const Benefits = () => {
     { value: "employment", label: "Employment" },
   ];
 
-  if (isLoading) {
+  if (isLoading && schemes.length === 0) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
         <div className="flex flex-col items-center gap-4">

@@ -13,14 +13,17 @@ import db from "@/services/database";
 import { toast } from "sonner";
 import type { Recommendation } from "@/services/database";
 import PageIntro from "@/components/PageIntro";
-import { hasMinimumTransactions } from "@/lib/dataRequirements";
+import { hasMinimumTransactions, hasMinimumTransactionsSync } from "@/lib/dataRequirements";
 import MinimumDataRequired from "@/components/MinimumDataRequired";
+import db, { getLocal, DEFAULT_RECOMMENDATIONS } from "@/services/database";
 
 const Tips = () => {
   const navigate = useNavigate();
-  const [recommendations, setRecommendations] = useState<Recommendation[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [hasMinimumData, setHasMinimumData] = useState(false);
+  const userId = typeof window !== 'undefined' ? localStorage.getItem('user_id') || 'usr-demo-101' : 'usr-demo-101';
+  const initialRecs = getLocal<Recommendation[]>(`arthasetu_recs_${userId}`, DEFAULT_RECOMMENDATIONS);
+  const [recommendations, setRecommendations] = useState<Recommendation[]>(initialRecs);
+  const [isLoading, setIsLoading] = useState(false);
+  const [hasMinimumData, setHasMinimumData] = useState(() => hasMinimumTransactionsSync());
   const [selectedRec, setSelectedRec] = useState<Recommendation | null>(null);
   const [isDetailOpen, setIsDetailOpen] = useState(false);
   const [filters, setFilters] = useState({
@@ -44,16 +47,15 @@ const Tips = () => {
     try {
       const hasMinData = await hasMinimumTransactions();
       setHasMinimumData(hasMinData);
-      setIsLoading(false);
     } catch (error) {
-      console.error("Error checking data requirements:", error);
+      console.warn("Error checking data requirements:", error);
+    } finally {
       setIsLoading(false);
     }
   };
 
   const loadRecommendations = async () => {
     try {
-      setIsLoading(true);
       const data = await db.recommendations.getAll({
         status: filters.status !== "all" ? filters.status : undefined,
         priority: filters.priority !== "all" ? filters.priority : undefined,
@@ -114,7 +116,7 @@ const Tips = () => {
     }
   };
 
-  if (isLoading) {
+  if (isLoading && recommendations.length === 0) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
         <div className="flex flex-col items-center gap-4">

@@ -15,15 +15,19 @@ import { toast } from "sonner";
 import { format } from "date-fns";
 import PageIntro from "@/components/PageIntro";
 import HelpTooltip from "@/components/HelpTooltip";
-import { hasMinimumTransactions } from "@/lib/dataRequirements";
+import { hasMinimumTransactions, hasMinimumTransactionsSync } from "@/lib/dataRequirements";
 import MinimumDataRequired from "@/components/MinimumDataRequired";
+import db, { getLocal, DEFAULT_ACTIONS, DEFAULT_BILLS } from "@/services/database";
 
 const Actions = () => {
   const navigate = useNavigate();
-  const [actions, setActions] = useState<any[]>([]);
-  const [bills, setBills] = useState<any[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [hasMinimumData, setHasMinimumData] = useState(false);
+  const userId = typeof window !== 'undefined' ? localStorage.getItem('user_id') || 'usr-demo-101' : 'usr-demo-101';
+  const initialActions = getLocal<any[]>(`arthasetu_actions_${userId}`, DEFAULT_ACTIONS);
+  const initialBills = getLocal<any[]>(`arthasetu_bills_${userId}`, DEFAULT_BILLS);
+  const [actions, setActions] = useState<any[]>(initialActions);
+  const [bills, setBills] = useState<any[]>(initialBills);
+  const [isLoading, setIsLoading] = useState(false);
+  const [hasMinimumData, setHasMinimumData] = useState(() => hasMinimumTransactionsSync());
   const [filter, setFilter] = useState<"today" | "upcoming" | "ongoing" | "completed" | "bills">("today");
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [isBillCreateOpen, setIsBillCreateOpen] = useState(false);
@@ -62,9 +66,9 @@ const Actions = () => {
     try {
       const hasMinData = await hasMinimumTransactions();
       setHasMinimumData(hasMinData);
-      setIsLoading(false);
     } catch (error) {
-      console.error("Error checking data requirements:", error);
+      console.warn("Error checking data requirements:", error);
+    } finally {
       setIsLoading(false);
     }
   };
@@ -225,7 +229,7 @@ const Actions = () => {
     }
   };
 
-  if (isLoading) {
+  if (isLoading && actions.length === 0 && bills.length === 0) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
         <div className="flex flex-col items-center gap-4">

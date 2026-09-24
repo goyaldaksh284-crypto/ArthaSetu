@@ -15,18 +15,21 @@ import { toast } from "sonner";
 import { format, addDays, addMonths } from "date-fns";
 import PageIntro from "@/components/PageIntro";
 import HelpTooltip from "@/components/HelpTooltip";
-import { hasMinimumTransactions } from "@/lib/dataRequirements";
+import { hasMinimumTransactions, hasMinimumTransactionsSync } from "@/lib/dataRequirements";
 import MinimumDataRequired from "@/components/MinimumDataRequired";
+import db, { getLocal, DEFAULT_BUDGETS, DEFAULT_TRANSACTIONS } from "@/services/database";
 
 const Budget = () => {
   const navigate = useNavigate();
-  const [budgets, setBudgets] = useState<any[]>([]);
-  const [activeBudget, setActiveBudget] = useState<any | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [hasMinimumData, setHasMinimumData] = useState(false);
+  const userId = typeof window !== 'undefined' ? localStorage.getItem('user_id') || 'usr-demo-101' : 'usr-demo-101';
+  const initialBudgets = getLocal<any[]>(`arthasetu_budgets_${userId}`, DEFAULT_BUDGETS);
+  const [budgets, setBudgets] = useState<any[]>(initialBudgets);
+  const [activeBudget, setActiveBudget] = useState<any | null>(initialBudgets[0] || null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [hasMinimumData, setHasMinimumData] = useState(() => hasMinimumTransactionsSync());
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
-  const [transactions, setTransactions] = useState<any[]>([]);
+  const [transactions, setTransactions] = useState<any[]>(() => getLocal<any[]>(`arthasetu_txs_${userId}`, DEFAULT_TRANSACTIONS));
   const [formData, setFormData] = useState({
     budget_type: "monthly",
     valid_from: format(new Date(), "yyyy-MM-dd"),
@@ -60,9 +63,9 @@ const Budget = () => {
     try {
       const hasMinData = await hasMinimumTransactions();
       setHasMinimumData(hasMinData);
-      setIsLoading(false);
     } catch (error) {
-      console.error("Error checking data requirements:", error);
+      console.warn("Error checking data requirements:", error);
+    } finally {
       setIsLoading(false);
     }
   };
@@ -271,7 +274,7 @@ const Budget = () => {
     }
   };
 
-  if (isLoading) {
+  if (isLoading && budgets.length === 0) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
         <div className="flex flex-col items-center gap-4">

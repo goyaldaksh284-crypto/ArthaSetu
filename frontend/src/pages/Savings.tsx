@@ -7,18 +7,20 @@ import { Progress } from "@/components/ui/progress";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Loader2, PiggyBank, TrendingUp, Home, Shield, Wallet, LineChart } from "lucide-react";
 import { motion } from "framer-motion";
-import db from "@/services/database";
+import db, { getLocal, DEFAULT_SAVINGS_GOALS } from "@/services/database";
 import { toast } from "sonner";
 import PageIntro from "@/components/PageIntro";
-import { hasMinimumTransactions } from "@/lib/dataRequirements";
+import { hasMinimumTransactions, hasMinimumTransactionsSync } from "@/lib/dataRequirements";
 import MinimumDataRequired from "@/components/MinimumDataRequired";
 
 const Savings = () => {
   const navigate = useNavigate();
-  const [savingsGoals, setSavingsGoals] = useState<any[]>([]);
+  const userId = typeof window !== 'undefined' ? localStorage.getItem('user_id') || 'usr-demo-101' : 'usr-demo-101';
+  const initialGoals = getLocal<any[]>(`arthasetu_goals_${userId}`, DEFAULT_SAVINGS_GOALS);
+  const [savingsGoals, setSavingsGoals] = useState<any[]>(initialGoals);
   const [investments, setInvestments] = useState<any[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [hasMinimumData, setHasMinimumData] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const [hasMinimumData, setHasMinimumData] = useState(() => hasMinimumTransactionsSync());
   const [activeTab, setActiveTab] = useState("savings");
   const [startingInvestmentId, setStartingInvestmentId] = useState<string | null>(null);
 
@@ -36,9 +38,9 @@ const Savings = () => {
     try {
       const hasMinData = await hasMinimumTransactions();
       setHasMinimumData(hasMinData);
-      setIsLoading(false);
     } catch (error) {
-      console.error("Error checking data requirements:", error);
+      console.warn("Error checking data requirements:", error);
+    } finally {
       setIsLoading(false);
     }
   };
@@ -112,7 +114,7 @@ const Savings = () => {
   const totalMonthlyContribution = savingsGoals.reduce((sum, g) => sum + (g.monthly_contribution || 0), 0);
   const totalInvestmentRecommended = investments.reduce((sum, i) => sum + (i.recommended_amount || 0), 0);
 
-  if (isLoading) {
+  if (isLoading && savingsGoals.length === 0) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
         <div className="flex flex-col items-center gap-4">

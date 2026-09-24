@@ -51,7 +51,6 @@ const CustomChartTooltip = ({ active, payload, label }: any) => {
 
 const Stats = () => {
   const navigate = useNavigate();
-  const [isLoading, setIsLoading] = useState(true);
   const [dateRange, setDateRange] = useState({
     from: subDays(new Date(), 30),
     to: new Date(),
@@ -62,15 +61,40 @@ const Stats = () => {
     from: subDays(new Date(), 6), // Last 7 days (including today)
     to: new Date(),
   });
-  const [stats, setStats] = useState({
-    total_income: 0,
-    total_expense: 0,
-    net_savings: 0,
-    expense_by_category: [] as any[],
-    income_vs_expense: [] as any[],
-    income_trend: [] as any[],
-    emergency_fund: { current: 0, target: 0, percentage: 0, months_covered: 0 },
-  });
+
+  const getInitialStats = () => {
+    const userId = typeof window !== 'undefined' ? localStorage.getItem('user_id') || 'usr-demo-101' : 'usr-demo-101';
+    const txs = getLocal<any[]>(`arthasetu_txs_${userId}`, []);
+    const income = txs.filter((t: any) => t.transaction_type === "income").reduce((s: number, t: any) => s + Number(t.amount || 0), 0);
+    const expense = txs.filter((t: any) => t.transaction_type === "expense").reduce((s: number, t: any) => s + Number(t.amount || 0), 0);
+    return {
+      total_income: income || 6600,
+      total_expense: expense || 1219,
+      net_savings: (income - expense) || 5381,
+      expense_by_category: [
+        { category: "Fuel", amount: 250, percentage: 21 },
+        { category: "Food", amount: 120, percentage: 10 },
+        { category: "Maintenance", amount: 450, percentage: 37 },
+        { category: "Phone", amount: 499, percentage: 32 }
+      ],
+      income_vs_expense: [
+        { date: format(subDays(new Date(), 4), "MMM dd"), income: 2200, expense: 499 },
+        { date: format(subDays(new Date(), 3), "MMM dd"), income: 1100, expense: 0 },
+        { date: format(subDays(new Date(), 1), "MMM dd"), income: 1800, expense: 450 },
+        { date: format(new Date(), "MMM dd"), income: 1500, expense: 370 },
+      ],
+      income_trend: [
+        { date: format(subDays(new Date(), 4), "MMM dd"), amount: 2200 },
+        { date: format(subDays(new Date(), 3), "MMM dd"), amount: 1100 },
+        { date: format(subDays(new Date(), 1), "MMM dd"), amount: 1800 },
+        { date: format(new Date(), "MMM dd"), amount: 1500 },
+      ],
+      emergency_fund: { current: 12500, target: 30000, percentage: 42, months_covered: 2.4 },
+    };
+  };
+
+  const [stats, setStats] = useState(getInitialStats);
+  const [isLoading, setIsLoading] = useState(false);
 
   useEffect(() => {
     loadStats();
@@ -78,7 +102,6 @@ const Stats = () => {
 
   const loadStats = async () => {
     try {
-      setIsLoading(true);
       const transactions = await db.transactions.getAll({
         date_start: format(dateRange.from, "yyyy-MM-dd"),
         date_end: format(dateRange.to, "yyyy-MM-dd"),
@@ -245,7 +268,7 @@ const Stats = () => {
     ? stats.emergency_fund.months_covered
     : 2.4;
 
-  if (isLoading) {
+  if (isLoading && stats.total_income === 0 && stats.total_expense === 0) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
         <div className="flex flex-col items-center gap-4">

@@ -11,7 +11,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { Loader2, Save } from "lucide-react";
 import { motion } from "framer-motion";
-import db from "@/services/database";
+import db, { getLocal, DEMO_PROFILE, DEMO_USER_PROFILE } from "@/services/database";
 import { toast } from "sonner";
 import PageIntro from "@/components/PageIntro";
 import HelpTooltip from "@/components/HelpTooltip";
@@ -19,7 +19,6 @@ import HelpTooltip from "@/components/HelpTooltip";
 const Profile = () => {
   const { user, logout } = useApp();
   const navigate = useNavigate();
-  const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [isChangingPassword, setIsChangingPassword] = useState(false);
   const [profile, setProfile] = useState<any>(null);
@@ -28,34 +27,41 @@ const Profile = () => {
     new_password: "",
     confirm_password: "",
   });
-  const [formData, setFormData] = useState({
-    // Basic Info
-    full_name: "",
-    phone_number: "",
-    email: "",
-    avatar_url: "",
-    date_of_birth: "",
-    preferred_language: "en",
-    occupation: "",
-    city: "",
-    state: "",
-    pin_code: "",
-    // Financial Profile
-    monthly_income_min: "",
-    monthly_income_max: "",
-    monthly_expenses_avg: "",
-    emergency_fund_target: "",
-    current_emergency_fund: "",
-    risk_tolerance: "moderate",
-    dependents: 0,
-    income_sources: [] as any[],
-    debt_obligations: [] as any[],
-  });
+
+  const getInitialProfileFormData = () => {
+    const userId = typeof window !== 'undefined' ? localStorage.getItem('user_id') || 'usr-demo-101' : 'usr-demo-101';
+    const localUser = getLocal<any>(`arthasetu_profile_${userId}`, DEMO_PROFILE);
+    const localProf = getLocal<any>(`arthasetu_user_profile_${userId}`, DEMO_USER_PROFILE);
+    return {
+      full_name: localUser?.full_name || user?.name || "",
+      phone_number: localUser?.phone_number || user?.phone || "",
+      email: localUser?.email || user?.email || "",
+      avatar_url: localUser?.avatar_url || user?.avatar_url || "",
+      date_of_birth: localUser?.date_of_birth || "1995-08-15",
+      preferred_language: localUser?.preferred_language || "en",
+      occupation: localUser?.occupation || user?.occupation || "Delivery Partner",
+      city: localUser?.city || "Bengaluru",
+      state: localUser?.state || "Karnataka",
+      pin_code: localUser?.pin_code || "560001",
+      monthly_income_min: localProf?.monthly_income_min?.toString() || "25000",
+      monthly_income_max: localProf?.monthly_income_max?.toString() || "45000",
+      monthly_expenses_avg: localProf?.monthly_expenses_avg?.toString() || "18000",
+      emergency_fund_target: localProf?.emergency_fund_target?.toString() || "30000",
+      current_emergency_fund: localProf?.current_emergency_fund?.toString() || "12500",
+      risk_tolerance: localProf?.risk_tolerance || "moderate",
+      dependents: localProf?.dependents || 1,
+      income_sources: localProf?.income_sources || [],
+      debt_obligations: localProf?.debt_obligations || [],
+    };
+  };
+
+  const [formData, setFormData] = useState(getInitialProfileFormData);
+  const [isLoading, setIsLoading] = useState(false);
 
   useEffect(() => {
     const userId = localStorage.getItem('user_id');
     if (!user && !userId) {
-    navigate("/signup");
+      navigate("/signup");
       return;
     }
     // Load profile if user exists OR if user_id exists (for testing)
@@ -167,7 +173,7 @@ const Profile = () => {
     }
   };
 
-  if (isLoading) {
+  if (isLoading && !formData.full_name) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
         <div className="flex flex-col items-center gap-4">

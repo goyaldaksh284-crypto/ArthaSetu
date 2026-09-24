@@ -15,14 +15,17 @@ import db from "@/services/database";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import PageIntro from "@/components/PageIntro";
-import { hasMinimumTransactions } from "@/lib/dataRequirements";
+import { hasMinimumTransactions, hasMinimumTransactionsSync } from "@/lib/dataRequirements";
 import MinimumDataRequired from "@/components/MinimumDataRequired";
+import db, { getLocal, DEFAULT_SAVINGS_GOALS } from "@/services/database";
 
 const Goals = () => {
   const navigate = useNavigate();
-  const [goals, setGoals] = useState<any[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [hasMinimumData, setHasMinimumData] = useState(false);
+  const userId = typeof window !== 'undefined' ? localStorage.getItem('user_id') || 'usr-demo-101' : 'usr-demo-101';
+  const initialGoals = getLocal<any[]>(`arthasetu_goals_${userId}`, DEFAULT_SAVINGS_GOALS);
+  const [goals, setGoals] = useState<any[]>(initialGoals);
+  const [isLoading, setIsLoading] = useState(false);
+  const [hasMinimumData, setHasMinimumData] = useState(() => hasMinimumTransactionsSync());
   const [expandedGoal, setExpandedGoal] = useState<string | null>(null);
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [isContributeOpen, setIsContributeOpen] = useState(false);
@@ -51,18 +54,19 @@ const Goals = () => {
     try {
       const hasMinData = await hasMinimumTransactions();
       setHasMinimumData(hasMinData);
-      setIsLoading(false);
     } catch (error) {
-      console.error("Error checking data requirements:", error);
+      console.warn("Error checking data requirements:", error);
+    } finally {
       setIsLoading(false);
     }
   };
 
   const loadGoals = async () => {
     try {
-      setIsLoading(true);
       const data = await db.financialGoals.getAll();
-      setGoals(data);
+      if (data && data.length > 0) {
+        setGoals(data);
+      }
     } catch (error) {
       console.error("Failed to load goals:", error);
       toast.error("Failed to load goals");
@@ -185,7 +189,7 @@ const Goals = () => {
     }
   };
 
-  if (isLoading) {
+  if (isLoading && goals.length === 0) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
         <div className="flex flex-col items-center gap-4">
