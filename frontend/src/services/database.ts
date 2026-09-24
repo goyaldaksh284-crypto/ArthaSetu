@@ -864,10 +864,17 @@ export const db = {
       // 1. Try Supabase Google OAuth first if connected to a live Supabase instance
       if (isSupabaseLive()) {
         try {
+          const origin = typeof window !== 'undefined' ? window.location.origin : '';
+          const redirectUrl = origin.includes('localhost') || origin.includes('127.0.0.1')
+            ? `${origin}/dashboard`
+            : (origin.includes('arthasetu-mocha.vercel.app')
+                ? 'https://arthasetu-mocha.vercel.app/dashboard'
+                : (origin.startsWith('https://') ? `${origin}/dashboard` : 'https://arthasetu-mocha.vercel.app/dashboard'));
+
           const { data, error } = await supabase.auth.signInWithOAuth({
             provider: 'google',
             options: {
-              redirectTo: `${window.location.origin}/dashboard`,
+              redirectTo: redirectUrl,
               skipBrowserRedirect: true,
             },
           });
@@ -1407,6 +1414,8 @@ export const db = {
         category: t.category || 'Other',
         description: t.description || '',
         payment_method: t.payment_method || 'UPI',
+        merchant_name: t.merchant_name || undefined,
+        source: t.source || undefined,
         verified: true,
         is_recurring: false,
         created_at: new Date().toISOString()

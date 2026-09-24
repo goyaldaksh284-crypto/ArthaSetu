@@ -30,6 +30,7 @@ const Dashboard = () => {
   const [selectedTransactions, setSelectedTransactions] = useState<Set<number>>(new Set());
   const [bankName, setBankName] = useState("");
   const [pdfError, setPdfError] = useState<string | null>(null);
+  const [pdfProgress, setPdfProgress] = useState<{ pagesDone: number; totalPages: number } | null>(null);
 
   useEffect(() => {
     const userId = localStorage.getItem('user_id');
@@ -84,17 +85,20 @@ const Dashboard = () => {
 
     setIsParsingPdf(true);
     setPdfError(null);
+    setPdfProgress(null);
     setIsPdfDialogOpen(true);
 
     try {
-      const pdfText = await extractTextFromPDF(file);
+      const pdfText = await extractTextFromPDF(file, (p) => setPdfProgress({ ...p }));
       const result = await parseBankStatement(pdfText);
 
       if (result.error) {
         setPdfError(result.error);
         setParsedTransactions([]);
       } else if (result.transactions.length === 0) {
-        setPdfError("No transactions found in the PDF. Please check the file format.");
+        setPdfError(
+          "No transactions found in the PDF. Please make sure this is a transaction-statement PDF (not a summary or a password-protected file)."
+        );
         setParsedTransactions([]);
       } else {
         setParsedTransactions(result.transactions);
@@ -104,10 +108,15 @@ const Dashboard = () => {
       }
     } catch (error) {
       console.error("PDF parsing error:", error);
-      setPdfError("Failed to parse PDF. Please ensure it's a valid bank statement.");
+      setPdfError(
+        error instanceof Error && error.message
+          ? error.message
+          : "Failed to parse PDF. Please ensure it's a valid bank statement."
+      );
       setParsedTransactions([]);
     } finally {
       setIsParsingPdf(false);
+      setPdfProgress(null);
       // Reset file input
       if (fileInputRef.current) {
         fileInputRef.current.value = "";
@@ -408,6 +417,12 @@ const Dashboard = () => {
               <div className="flex flex-col items-center justify-center py-12">
                 <Loader2 className="w-8 h-8 animate-spin text-primary mb-4" />
                 <p className="text-muted-foreground">Parsing PDF...</p>
+                {pdfProgress && pdfProgress.totalPages > 1 && (
+                  <p className="text-xs text-muted-foreground mt-2">
+                    Extracting page {Math.min(pdfProgress.pagesDone + 1, pdfProgress.totalPages)} of{" "}
+                    {pdfProgress.totalPages}
+                  </p>
+                )}
               </div>
             ) : pdfError ? (
               <div className="flex flex-col items-center justify-center py-12 text-center">

@@ -220,42 +220,96 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
   }, []);
 
   useEffect(() => {
-    const existingUserId = localStorage.getItem('user_id') || 'usr-demo-101';
-    localStorage.setItem('user_id', existingUserId);
-    setIsAuthenticated(true);
+    let isSubscribed = true;
 
-    const syncSession = async (session: any) => {
+    const handleAuthRedirectAndSession = async () => {
       try {
-        if (session?.user) {
-          await db.users.syncAuthUser(session.user);
-        } else {
-          const activeId = localStorage.getItem('user_id') || 'usr-demo-101';
-          localStorage.setItem('user_id', activeId);
+        setIsLoading(true);
+
+        // 1. Automatically detect PKCE authorization code in URL (e.g. ?code=...)
+        if (typeof window !== 'undefined' && window.location.search.includes('code=')) {
+          const params = new URLSearchParams(window.location.search);
+          const code = params.get('code');
+          if (code) {
+            try {
+              const { data, error } = await supabase.auth.exchangeCodeForSession(code);
+              if (!error && data?.session?.user && isSubscribed) {
+                await db.users.syncAuthUser(data.session.user);
+                localStorage.setItem('user_id', data.session.user.id);
+                if (data.session.access_token) {
+                  localStorage.setItem('auth_token', data.session.access_token);
+                }
+                setIsAuthenticated(true);
+                await loadUserData();
+                // Clean URL query parameters
+                window.history.replaceState({}, document.title, window.location.pathname);
+                return;
+              }
+            } catch (pkceErr) {
+              console.warn('[ArthaSetu Auth] PKCE exchange error:', pkceErr);
+            }
+          }
         }
+
+        // 2. Automatically detect Supabase OAuth session from URL hash or storage
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session?.user && isSubscribed) {
+          await db.users.syncAuthUser(session.user);
+          localStorage.setItem('user_id', session.user.id);
+          if (session.access_token) {
+            localStorage.setItem('auth_token', session.access_token);
+          }
+          setIsAuthenticated(true);
+          await loadUserData();
+          // Clean URL hash tokens so user sees clean /dashboard
+          if (window.location.hash.includes('access_token=')) {
+            window.history.replaceState({}, document.title, window.location.pathname);
+          }
+          return;
+        }
+
+        // 3. Fallback to existing logged in user or demo user
+        const existingUserId = localStorage.getItem('user_id') || 'usr-demo-101';
+        localStorage.setItem('user_id', existingUserId);
         setIsAuthenticated(true);
-        await loadUserData();
-      } catch (error) {
-        console.warn('[ArthaSetu AppContext] Sync session active:', error);
+        if (isSubscribed) {
+          await loadUserData();
+        }
+      } catch (err) {
+        console.warn('[ArthaSetu Auth] Session sync error:', err);
       } finally {
-        setIsLoading(false);
+        if (isSubscribed) {
+          setIsLoading(false);
+        }
       }
     };
 
-    try {
-      supabase.auth.getSession().then(({ data: { session } }) => {
-        syncSession(session);
-      }).catch(() => {
-        syncSession(null);
-      });
+    handleAuthRedirectAndSession();
 
-      const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
-        syncSession(session);
-      });
+    // 4. Real-time auth listener for OAuth state changes
+    const { data: listener } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (!isSubscribed) return;
+      if (session?.user) {
+        await db.users.syncAuthUser(session.user);
+        localStorage.setItem('user_id', session.user.id);
+        if (session.access_token) {
+          localStorage.setItem('auth_token', session.access_token);
+        }
+        setIsAuthenticated(true);
+        await loadUserData();
+        if (window.location.hash.includes('access_token=') || window.location.search.includes('code=')) {
+          window.history.replaceState({}, document.title, window.location.pathname);
+        }
+      } else if (event === 'SIGNED_OUT') {
+        setIsAuthenticated(false);
+        setUser(null);
+      }
+    });
 
-      return () => listener?.subscription?.unsubscribe();
-    } catch (e) {
-      syncSession(null);
-    }
+    return () => {
+      isSubscribed = false;
+      listener?.subscription?.unsubscribe();
+    };
   }, [loadUserData]);
 
   // Calculate daily goal and progress
