@@ -2,7 +2,7 @@ import { createContext, useContext, useState, ReactNode, useEffect, useCallback 
 import { useNavigate } from "react-router-dom";
 import apiService from "@/services/api";
 import type { User as ApiUser, Transaction as ApiTransaction, Recommendation as ApiRecommendation } from "@/services/api";
-import db from "@/services/database";
+import db, { getLocal } from "@/services/database";
 import { supabase } from "@/lib/supabase";
 
 export interface User extends ApiUser {
@@ -87,12 +87,38 @@ const DEMO_RECOMMENDATIONS: Recommendation[] = [
 
 export const AppProvider = ({ children }: { children: ReactNode }) => {
   const navigate = useNavigate();
-  const [user, setUser] = useState<User | null>(DEMO_USER);
+  const [user, setUser] = useState<User | null>(() => {
+    const savedId = typeof window !== 'undefined' ? localStorage.getItem('user_id') : null;
+    if (savedId) {
+      const localProfile = getLocal<any>(`arthasetu_profile_${savedId}`, null);
+      if (localProfile) {
+        return {
+          id: localProfile.user_id || savedId,
+          name: localProfile.full_name || 'User',
+          email: localProfile.email || '',
+          phone: localProfile.phone_number || '',
+          avatar_url: localProfile.avatar_url || '',
+          balance: 14850,
+          created_at: localProfile.created_at || new Date().toISOString(),
+          updated_at: localProfile.updated_at || new Date().toISOString(),
+          occupation: localProfile.occupation || 'Delivery Partner',
+        };
+      }
+    }
+    return DEMO_USER;
+  });
   const [transactions, setTransactions] = useState<Transaction[]>(DEMO_TRANSACTIONS);
   const [recommendations, setRecommendations] = useState<Recommendation[]>(DEMO_RECOMMENDATIONS);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [isAuthenticated, setIsAuthenticated] = useState(true);
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return true;
+    return Boolean(
+      localStorage.getItem('auth_token') ||
+      localStorage.getItem('user_id') ||
+      localStorage.getItem('arthasetu_supabase_auth_token')
+    );
+  });
 
   // Load user profile and transactions using resilient database service
   const loadUserData = useCallback(async () => {
@@ -442,10 +468,17 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
 
   // Logout handler
   const logout = async () => {
-    await db.auth.logout();
-    apiService.auth.logout();
+    try {
+      await supabase.auth.signOut().catch(() => {});
+      await db.auth.logout().catch(() => {});
+      apiService.auth.logout();
+    } catch (e) {}
+    localStorage.removeItem('user_id');
+    localStorage.removeItem('auth_token');
+    localStorage.removeItem('arthasetu_supabase_auth_token');
+    setUser(null);
     setIsAuthenticated(false);
-    navigate("/");
+    navigate("/login", { replace: true });
   };
 
   // Refresh data

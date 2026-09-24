@@ -126,10 +126,10 @@ const MONTH_MAP: Record<string, string> = {
   jul: '07', aug: '08', sep: '09', sept: '09', oct: '10', nov: '11', dec: '12',
 };
 
-// Ordered longest-first so e.g. "15-Jan-2024" is not eaten by "15-01-2024"
-const DATE_PATTERNS: Array<{ re: RegExp; kind: 'dmy4' | 'dmy2' | 'dmony' | 'iso' | 'dmdot' | 'dmonyy2' }> = [
-  { re: /\b(\d{1,2})[\/\-](Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec)[\/\-](\d{4})\b/gi, kind: 'dmony' }, // 15-Jan-2024
-  { re: /\b(\d{1,2})[\s.'\-](Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[\s.'\-](\d{2})\b/gi, kind: 'dmonyy2' }, // 15 Jan'24 / 15-Jan-24
+// Ordered so unambiguous matches win; month names are validated via MONTH_MAP
+const DATE_PATTERNS: Array<{ re: RegExp; kind: 'dmy4' | 'dmy2' | 'dmony4' | 'iso' | 'dmdot' | 'dmonyy2' }> = [
+  { re: /\b(\d{1,2})[\/\-\s.](Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec)[a-z]*[\/\-\s.](\d{4})\b/gi, kind: 'dmony4' }, // 15 Jan 2024 / 15-Jan-2024
+  { re: /\b(\d{1,2})[\/\-\s.]'?(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*[\/\-\s.']?(\d{2})\b/gi, kind: 'dmonyy2' }, // 15 Jan'24 / 15-Jan-24
   { re: /\b(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})\b/g, kind: 'iso' }, // 2024-01-15
   { re: /\b(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})\b/g, kind: 'dmy4' }, // 15/01/2024
   { re: /\b(\d{1,2})\.(\d{1,2})\.(\d{4})\b/g, kind: 'dmdot' }, // 15.01.2024
@@ -158,8 +158,7 @@ export function parseDate(dateStr: string): string | null {
     const m = dateStr.match(re);
     if (!m) continue;
     switch (kind) {
-      case 'dmony':
-        return normalizeDateWithMonth(m[1], m[2], m[3]);
+      case 'dmony4':
       case 'dmonyy2':
         return normalizeDateWithMonth(m[1], m[2], m[3]);
       case 'iso':
@@ -172,25 +171,25 @@ export function parseDate(dateStr: string): string | null {
 }
 
 /** All date matches on a line (bank rows often carry txn date + value date). */
-export function findDatesOnLine(line: string): Array<{ iso: string; end: number }> {
-  const out: Array<{ iso: string; end: number }> = [];
+export function findDatesOnLine(line: string): Array<{ iso: string; start: number; end: number }> {
+  const out: Array<{ iso: string; start: number; end: number }> = [];
   for (const { re, kind } of DATE_PATTERNS) {
     re.lastIndex = 0;
     let m: RegExpExecArray | null;
     while ((m = re.exec(line)) !== null) {
       let iso: string | null = null;
-      if (kind === 'dmony' || kind === 'dmonyy2') iso = normalizeDateWithMonth(m[1], m[2], m[3]);
+      if (kind === 'dmony4' || kind === 'dmonyy2') iso = normalizeDateWithMonth(m[1], m[2], m[3]);
       else if (kind === 'iso') iso = normalizeDate(m[3], m[2], m[1]);
       else iso = normalizeDate(m[1], m[2], m[3]);
-      if (iso) out.push({ iso, end: m.index + m[0].length });
+      if (iso) out.push({ iso, start: m.index, end: m.index + m[0].length });
     }
   }
   // Deduplicate identical matches (same span, same result)
   const seen = new Set<string>();
   return out
-    .sort((a, b) => a.end - b.end || b.iso.length - a.iso.length)
+    .sort((a, b) => a.start - b.start || b.end - a.end)
     .filter((d) => {
-      const key = `${d.iso}@${d.end}`;
+      const key = `${d.start}:${d.end}`;
       if (seen.has(key)) return false;
       seen.add(key);
       return true;
@@ -207,12 +206,12 @@ interface AmountMatch {
 /**
  * Find monetary amounts on a line. Handles Indian grouping (1,23,456.00),
  * plain numbers, optional currency prefixes and trailing Cr/Dr markers.
- * Requires decimals OR a thousands comma OR a currency prefix/CrDr marker so
- * that bare reference numbers ("123456") are not mistaken for amounts.
+ * Requires decimals OR a thousands comma OR a currency prefix so that bare
+ * reference numbers ("123456") are not mistaken for amounts.
  */
 export function findAmountsOnLine(line: string): AmountMatch[] {
   const re = new RegExp(
-    /((?:₹|rs\.?|inr)\s*)?(\d{1,3}(?:,\d{2,3})+(?:\.\d{1,2})?|\d+\.\d{1,2}|(?:₹|rs\.?|inr)\s*\d+)(\s*(?:cr|dr)\.?)(?![a-z0-9])/gi
+    /((?:₹|rs\.?|inr)\s*)?(\d{1,3}(?:,\d{2,3})+(?:\.\d{1,2})?|\d+\.\d{1,2}|(?:₹|rs\.?|inr)\s*\d+)(\s*(?:cr|dr)\.?)?(?![a-z0-9])/gi
   );
   const out: AmountMatch[] = [];
   let m: RegExpExecArray | null;
@@ -367,18 +366,20 @@ export async function extractTextFromPDF(
 // Statement parsing
 // ---------------------------------------------------------------------------
 
-const SKIP_LINE_RE =
-  /(opening\s*balance|closing\s*balance|b\/?f\b|brought\s*forward|carried\s*forward|c\/?f\b|page\s*\d+(\s*(of|\/)\s*\d+)?|statement\s+(of|summary|period)|account\s*(no|number|statement)|total\b|grand\s+total|sub\s*total|summary|ifsc|micr|branch|nomination|this\s+is\s+a\s+(system|computer)\s+generated|end\s+of\s+(statement|report))/i;
+// Narrow list for candidate transaction rows: these rows carry a balance but
+// are not transactions (e.g. "Brought Forward 01/04/2024  10,000.00").
+const ROW_SKIP_RE =
+  /(opening\s*balance|closing\s*balance|b\/?f\b|brought\s*forward|carried\s*forward|c\/?f\b)/i;
+
+// Broad list used only when deciding whether a date-less, amount-less line is
+// a wrapped narration (keep) or page furniture (drop).
+const FURNITURE_RE =
+  /(page\s*\d+(\s*(of|\/)\s*\d+)?|statement\s+(of|summary|period)|account\s*(no|number|statement)|total\b|grand\s+total|sub\s*total|summary|ifsc|micr|registered\s+office|this\s+is\s+a\s+(system|computer)\s+generated|end\s+of\s+(statement|report))/i;
 
 interface RawRow {
   date: string;
   description: string;
   amounts: AmountMatch[];
-}
-
-/** Lines that introduce transaction rows, used to detect continuation lines. */
-function looksLikeTransactionLine(line: string): boolean {
-  return findDatesOnLine(line).length > 0 && findAmountsOnLine(line).length > 0;
 }
 
 function parseGenericStatement(text: string): ParsedTransaction[] {
@@ -481,7 +482,7 @@ function parseGenericStatement(text: string): ParsedTransaction[] {
 
     // Continuation line: wrapped narration from the previous row
     if (dates.length === 0 && amounts.length === 0) {
-      if (lastWasTransaction && line.length > 3 && !SKIP_LINE_RE.test(line)) {
+      if (lastWasTransaction && line.length > 3 && !FURNITURE_RE.test(line)) {
         const prev = transactions[transactions.length - 1];
         if (prev && prev.description.length < 200) {
           prev.description = `${prev.description} ${line}`.replace(/\s+/g, ' ').trim();
@@ -496,7 +497,7 @@ function parseGenericStatement(text: string): ParsedTransaction[] {
       continue;
     }
 
-    if (SKIP_LINE_RE.test(line)) {
+    if (ROW_SKIP_RE.test(line)) {
       // Some rows like "Opening Balance" carry the starting balance
       const bal = amounts[amounts.length - 1];
       if (/opening\s*balance|b\/?f\b|brought\s*forward/i.test(line) && bal) {
@@ -513,8 +514,15 @@ function parseGenericStatement(text: string): ParsedTransaction[] {
     let description = line.substring(descStart, descEnd).trim();
     // Strip a trailing second (value) date if present
     if (dates.length > 1) {
-      const secondDateText = line.substring(dates[1].end - 14, dates[1].end);
-      description = description.replace(secondDateText.trim(), ' ').trim();
+      for (const d of dates.slice(1)) {
+        const relStart = d.start - descStart;
+        const relEnd = d.end - descStart;
+        if (relStart >= 0 && relEnd <= description.length) {
+          description = (
+            description.slice(0, relStart) + ' ' + description.slice(relEnd)
+          ).replace(/\s+/g, ' ').trim();
+        }
+      }
     }
     description = description.replace(/\s+/g, ' ').trim();
 

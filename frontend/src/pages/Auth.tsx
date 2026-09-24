@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -15,13 +15,20 @@ import GoogleSignInButton from "@/components/GoogleSignInButton";
 const Auth = () => {
   const navigate = useNavigate();
   const location = useLocation();
-  const { login, signup, loginWithGoogle } = useApp();
+  const { login, signup, loginWithGoogle, isAuthenticated, user } = useApp();
   const [activeTab, setActiveTab] = useState<"login" | "signup">(
     location.pathname === "/signup" ? "signup" : "login"
   );
   const [isLoading, setIsLoading] = useState(false);
   const [isGoogleLoading, setIsGoogleLoading] = useState(false);
   const [rememberMe, setRememberMe] = useState(true);
+
+  // If user is already authenticated, redirect straight to dashboard without showing login page
+  useEffect(() => {
+    if (isAuthenticated && user && !isLoading && !isGoogleLoading) {
+      navigate("/dashboard", { replace: true });
+    }
+  }, [isAuthenticated, user, isLoading, isGoogleLoading, navigate]);
 
   const [loginData, setLoginData] = useState({
     phone_number: "9876543210",

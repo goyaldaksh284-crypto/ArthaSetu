@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -12,10 +12,18 @@ import GoogleSignInButton from "@/components/GoogleSignInButton";
 
 const Signup = () => {
   const navigate = useNavigate();
-  const { signup, loginWithGoogle } = useApp();
+  const { signup, loginWithGoogle, isAuthenticated, user } = useApp();
   const [step, setStep] = useState(1);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isGoogleLoading, setIsGoogleLoading] = useState(false);
+
+  // If user is already authenticated, redirect straight to dashboard without showing signup form
+  useEffect(() => {
+    if (isAuthenticated && user && !isSubmitting && !isGoogleLoading) {
+      navigate("/dashboard", { replace: true });
+    }
+  }, [isAuthenticated, user, isSubmitting, isGoogleLoading, navigate]);
+
   const [formData, setFormData] = useState({
     email: "",
     password: "",

@@ -187,7 +187,7 @@ const getUserId = (): string => {
   return localStorage.getItem('user_id') || 'usr-demo-101';
 };
 
-const getLocal = <T>(key: string, defaultValue: T): T => {
+export const getLocal = <T>(key: string, defaultValue: T): T => {
   try {
     let item = localStorage.getItem(key);
     if (!item && key.startsWith('arthasetu_')) {
@@ -199,7 +199,7 @@ const getLocal = <T>(key: string, defaultValue: T): T => {
   }
 };
 
-const setLocal = <T>(key: string, value: T): void => {
+export const setLocal = <T>(key: string, value: T): void => {
   try {
     localStorage.setItem(key, JSON.stringify(value));
   } catch (e) {

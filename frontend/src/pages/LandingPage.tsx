@@ -1,5 +1,6 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useApp } from '@/contexts/AppContext';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -20,6 +21,7 @@ import { motion } from 'framer-motion';
 
 const LandingPage = () => {
   const navigate = useNavigate();
+  const { isAuthenticated, user } = useApp();
 
   const features = [
     { 
@@ -193,23 +195,36 @@ const LandingPage = () => {
               transition={{ delay: 0.8 }}
               className="flex flex-col sm:flex-row gap-4 justify-center mb-16"
             >
-              <Button
-                size="lg"
-                onClick={() => navigate('/signup')}
-                className="bg-slate-900 hover:bg-slate-800 text-white px-8 py-6 text-lg font-medium shadow-lg hover:shadow-xl transition-all duration-300"
-              >
-                Start Your Journey
-                <ArrowRight className="ml-2" size={20} />
-              </Button>
-              <Button
-                variant="outline"
-                size="lg"
-                onClick={() => navigate('/login')}
-                className="border-slate-300 text-slate-700 hover:bg-slate-50 px-8 py-6 text-lg font-medium"
-              >
-                Sign In
-                <ChevronRight className="ml-2" size={20} />
-              </Button>
+              {isAuthenticated && user ? (
+                <Button
+                  size="lg"
+                  onClick={() => navigate('/dashboard')}
+                  className="bg-slate-900 hover:bg-slate-800 text-white px-8 py-6 text-lg font-medium shadow-lg hover:shadow-xl transition-all duration-300"
+                >
+                  Go to Dashboard ({user.name?.split(' ')[0] || 'My Account'})
+                  <ArrowRight className="ml-2" size={20} />
+                </Button>
+              ) : (
+                <>
+                  <Button
+                    size="lg"
+                    onClick={() => navigate('/signup')}
+                    className="bg-slate-900 hover:bg-slate-800 text-white px-8 py-6 text-lg font-medium shadow-lg hover:shadow-xl transition-all duration-300"
+                  >
+                    Start Your Journey
+                    <ArrowRight className="ml-2" size={20} />
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="lg"
+                    onClick={() => navigate('/login')}
+                    className="border-slate-300 text-slate-700 hover:bg-slate-50 px-8 py-6 text-lg font-medium"
+                  >
+                    Sign In
+                    <ChevronRight className="ml-2" size={20} />
+                  </Button>
+                </>
+              )}
             </motion.div>
 
             {/* Stats Grid */}
@@ -450,22 +465,35 @@ const LandingPage = () => {
               Join the revolution in financial management designed specifically for gig economy workers.
             </p>
             <div className="flex flex-col sm:flex-row gap-4 justify-center">
-              <Button
-                size="lg"
-                onClick={() => navigate('/signup')}
-                className="bg-white text-slate-900 hover:bg-slate-100 px-8 py-6 text-lg font-medium"
-              >
-                Get Started Free
-                <ArrowRight className="ml-2" size={20} />
-              </Button>
-              <Button
-                variant="outline"
-                size="lg"
-                onClick={() => navigate('/login')}
-                className="bg-transparent border-slate-600 text-slate-300 hover:bg-slate-800 hover:text-white px-8 py-6 text-lg font-medium"
-              >
-                Sign In
-              </Button>
+              {isAuthenticated && user ? (
+                <Button
+                  size="lg"
+                  onClick={() => navigate('/dashboard')}
+                  className="bg-white text-slate-900 hover:bg-slate-100 px-8 py-6 text-lg font-medium"
+                >
+                  Open Dashboard ({user.name?.split(' ')[0] || 'My Account'})
+                  <ArrowRight className="ml-2" size={20} />
+                </Button>
+              ) : (
+                <>
+                  <Button
+                    size="lg"
+                    onClick={() => navigate('/signup')}
+                    className="bg-white text-slate-900 hover:bg-slate-100 px-8 py-6 text-lg font-medium"
+                  >
+                    Get Started Free
+                    <ArrowRight className="ml-2" size={20} />
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="lg"
+                    onClick={() => navigate('/login')}
+                    className="bg-transparent border-slate-600 text-slate-300 hover:bg-slate-800 hover:text-white px-8 py-6 text-lg font-medium"
+                  >
+                    Sign In
+                  </Button>
+                </>
+              )}
             </div>
           </motion.div>
         </div>
