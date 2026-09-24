@@ -43,6 +43,7 @@ interface AppContextType {
   isAuthenticated: boolean;
   login: (phone_number: string, password?: string) => Promise<void>;
   signup: (data: any) => Promise<void>;
+  loginWithGoogle: () => Promise<void>;
   logout: () => Promise<void>;
   refreshData: () => Promise<void>;
 }
@@ -353,6 +354,30 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     }
   };
 
+  // Google Login handler
+  const loginWithGoogle = async () => {
+    try {
+      setError(null);
+      setIsLoading(true);
+      const res = await db.auth.signInWithGoogle();
+      if (res && 'redirected' in res && res.redirected) {
+        return;
+      }
+      setIsAuthenticated(true);
+      if (res?.user_id) {
+        localStorage.setItem('user_id', res.user_id);
+      }
+      await loadUserData();
+      navigate("/dashboard");
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : "Google sign-in failed";
+      setError(errorMsg);
+      throw err;
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   // Logout handler
   const logout = async () => {
     await db.auth.logout();
@@ -380,6 +405,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     isAuthenticated,
     login,
     signup,
+    loginWithGoogle,
     logout,
     refreshData,
   };

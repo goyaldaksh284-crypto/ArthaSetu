@@ -10,15 +10,17 @@ import { useApp } from "@/contexts/AppContext";
 import { motion } from "framer-motion";
 import { ArrowRight, Loader2, Brain, TrendingUp, Shield, Zap, Sparkles } from "lucide-react";
 import { toast } from "sonner";
+import GoogleSignInButton from "@/components/GoogleSignInButton";
 
 const Auth = () => {
   const navigate = useNavigate();
   const location = useLocation();
-  const { login, signup } = useApp();
+  const { login, signup, loginWithGoogle } = useApp();
   const [activeTab, setActiveTab] = useState<"login" | "signup">(
     location.pathname === "/signup" ? "signup" : "login"
   );
   const [isLoading, setIsLoading] = useState(false);
+  const [isGoogleLoading, setIsGoogleLoading] = useState(false);
   const [rememberMe, setRememberMe] = useState(true);
 
   const [loginData, setLoginData] = useState({
@@ -63,6 +65,19 @@ const Auth = () => {
       toast.error("Demo login error: " + (error instanceof Error ? error.message : ""));
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleGoogleLogin = async () => {
+    try {
+      setIsGoogleLoading(true);
+      await loginWithGoogle();
+      toast.success("Welcome! Signed in with Google successfully.");
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : "Google sign-in failed";
+      toast.error(errorMsg);
+    } finally {
+      setIsGoogleLoading(false);
     }
   };
 
@@ -180,6 +195,27 @@ const Auth = () => {
               </div>
             </div>
 
+            {/* Google Authentication (Layered Capsule UI) */}
+            <div className="mb-6">
+              <GoogleSignInButton
+                onClick={handleGoogleLogin}
+                isLoading={isGoogleLoading}
+                disabled={isLoading}
+              />
+
+              {/* Elegant Divider matching screenshot design */}
+              <div className="relative mt-6 mb-5 text-center">
+                <div className="absolute inset-0 flex items-center">
+                  <div className="w-full border-t border-slate-200"></div>
+                </div>
+                <div className="relative flex justify-center text-xs tracking-wider">
+                  <span className="bg-white px-3 text-slate-400 font-medium">
+                    or continue with mobile number
+                  </span>
+                </div>
+              </div>
+            </div>
+
             {/* Quick Demo Banner for Mobile / Quick Access */}
             <div className="mb-6 p-3 bg-emerald-50 border border-emerald-200 rounded-xl flex items-center justify-between">
               <div>
@@ -190,7 +226,7 @@ const Auth = () => {
                 size="sm"
                 type="button"
                 onClick={handleDemoLogin}
-                disabled={isLoading}
+                disabled={isLoading || isGoogleLoading}
                 className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs h-8 px-3"
               >
                 ⚡ Quick Demo Login

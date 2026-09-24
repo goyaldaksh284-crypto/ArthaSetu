@@ -8,12 +8,14 @@ import { useApp } from "@/contexts/AppContext";
 import { motion, AnimatePresence } from "framer-motion";
 import { ArrowLeft, ArrowRight, Loader2 } from "lucide-react";
 import { toast } from "sonner";
+import GoogleSignInButton from "@/components/GoogleSignInButton";
 
 const Signup = () => {
   const navigate = useNavigate();
-  const { signup } = useApp();
+  const { signup, loginWithGoogle } = useApp();
   const [step, setStep] = useState(1);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isGoogleLoading, setIsGoogleLoading] = useState(false);
   const [formData, setFormData] = useState({
     email: "",
     password: "",
@@ -114,7 +116,34 @@ const Signup = () => {
                     </div>
                   </div>
                   <h2 className="text-2xl font-bold mb-1">Let's get started</h2>
-                  <p className="text-muted-foreground">Create your ArthaSetu account</p>
+                  <p className="text-muted-foreground mb-4">Create your ArthaSetu account</p>
+
+                  <GoogleSignInButton
+                    onClick={async () => {
+                      try {
+                        setIsGoogleLoading(true);
+                        await loginWithGoogle();
+                        toast.success("Welcome to ArthaSetu!");
+                      } catch (error) {
+                        toast.error(error instanceof Error ? error.message : "Google sign-in failed");
+                      } finally {
+                        setIsGoogleLoading(false);
+                      }
+                    }}
+                    isLoading={isGoogleLoading}
+                    disabled={isSubmitting}
+                  />
+
+                  <div className="relative my-4 text-center">
+                    <div className="absolute inset-0 flex items-center">
+                      <div className="w-full border-t border-border"></div>
+                    </div>
+                    <div className="relative flex justify-center text-xs uppercase tracking-wider">
+                      <span className="bg-card px-3 text-muted-foreground font-medium">
+                        or register with email
+                      </span>
+                    </div>
+                  </div>
                 </div>
                 <div className="space-y-4">
                   <div className="space-y-2">
