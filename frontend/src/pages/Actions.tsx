@@ -10,7 +10,6 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Loader2, CheckCircle, Clock, Play, Pause, RotateCcw, Home, Receipt, Plus } from "lucide-react";
 import { motion } from "framer-motion";
-import db from "@/services/database";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import PageIntro from "@/components/PageIntro";

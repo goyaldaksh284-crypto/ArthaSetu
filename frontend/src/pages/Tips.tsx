@@ -9,7 +9,6 @@ import { Badge } from "@/components/ui/badge";
 import { Loader2, Lightbulb, Search, CheckCircle, XCircle, Clock, Home } from "lucide-react";
 import { motion } from "framer-motion";
 import { useNavigate } from "react-router-dom";
-import db from "@/services/database";
 import { toast } from "sonner";
 import type { Recommendation } from "@/services/database";
 import PageIntro from "@/components/PageIntro";

@@ -10,7 +10,6 @@ import { Progress } from "@/components/ui/progress";
 import { Loader2, Plus, Edit, Trash2, Home, X } from "lucide-react";
 import { motion } from "framer-motion";
 import { useNavigate } from "react-router-dom";
-import db from "@/services/database";
 import { toast } from "sonner";
 import { format, addDays, addMonths } from "date-fns";
 import PageIntro from "@/components/PageIntro";
